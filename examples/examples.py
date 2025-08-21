@@ -7,7 +7,7 @@ import os
 import json
 from pathlib import Path
 
-from semantic_chunker import SemanticChunker, ChunkConfig
+from src.antsk_filechunk.core.enhanced_semantic_chunker import SemanticChunker, ChunkConfig
 
 
 def example_basic_usage():

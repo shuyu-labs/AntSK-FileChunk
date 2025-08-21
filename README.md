@@ -123,7 +123,7 @@ AntSK-FileChunk/
 
 ```bash
 # 克隆项目
-git clone https://github.com/antsk/AntSK-FileChunk.git
+git clone https://github.com/xuzeyu91/AntSK-FileChunk.git
 cd AntSK-FileChunk
 
 # 安装依赖
@@ -471,8 +471,8 @@ mypy src/
 ## 📞 联系我们
 
 - 📧 邮箱: antskpro@qq.com
-- 🐛 问题报告: [GitHub Issues](https://github.com/antsk/AntSK-FileChunk/issues)
-- 💬 讨论交流: [GitHub Discussions](https://github.com/antsk/AntSK-FileChunk/discussions)
+- 🐛 问题报告: [GitHub Issues](https://github.com/xuzeyu91/AntSK-FileChunk/issues)
+- 💬 讨论交流: [GitHub Discussions](https://github.com/xuzeyu91/AntSK-FileChunk/discussions)
 
 ---
 

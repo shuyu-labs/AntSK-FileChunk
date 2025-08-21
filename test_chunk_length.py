@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from antsk_filechunk.core.semantic_chunker import SemanticChunker, ChunkConfig
+from antsk_filechunk.core.enhanced_semantic_chunker import SemanticChunker, ChunkConfig
 
 def test_chunk_lengths():
     """测试切片长度调整效果"""

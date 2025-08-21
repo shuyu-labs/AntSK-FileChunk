@@ -257,7 +257,7 @@ class ChunkOptimizer:
             
             sub_content = content[start:end].strip()
             if sub_content:
-                from .semantic_chunker import TextChunk
+                from ..core.enhanced_semantic_chunker import TextChunk
                 sub_chunk = TextChunk(
                     content=sub_content,
                     start_pos=start,
@@ -289,7 +289,7 @@ class ChunkOptimizer:
         """
         content = ' '.join(sentences)
         
-        from .semantic_chunker import TextChunk
+        from ..core.enhanced_semantic_chunker import TextChunk
         return TextChunk(
             content=content,
             start_pos=0,  # 相对位置
@@ -322,7 +322,7 @@ class ChunkOptimizer:
         # 重新计算语义得分（简化为平均值）
         merged_score = (chunk1.semantic_score + chunk2.semantic_score) / 2
         
-        from .semantic_chunker import TextChunk
+        from ..core.enhanced_semantic_chunker import TextChunk
         return TextChunk(
             content=merged_content,
             start_pos=chunk1.start_pos,

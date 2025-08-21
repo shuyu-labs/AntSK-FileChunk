@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from antsk_filechunk.core.semantic_chunker import SemanticChunker, ChunkConfig
+from antsk_filechunk.core.enhanced_semantic_chunker import SemanticChunker, ChunkConfig
 
 def test_semantic_integrity():
     """测试语义完整性是否得到保护"""

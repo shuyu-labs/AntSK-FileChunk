@@ -28,7 +28,7 @@ pip install -r requirements.txt
 ## 使用示例
 
 ```python
-from semantic_chunker import SemanticChunker
+from antsk_filechunk.core.enhanced_semantic_chunker import SemanticChunker
 
 # 创建切片器实例
 chunker = SemanticChunker()

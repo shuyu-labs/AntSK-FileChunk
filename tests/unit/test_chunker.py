@@ -7,7 +7,7 @@ import tempfile
 import json
 from pathlib import Path
 
-from semantic_chunker import SemanticChunker, ChunkConfig, TextChunk
+from src.antsk_filechunk.core.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk
 
 
 class TestSemanticChunker(unittest.TestCase):

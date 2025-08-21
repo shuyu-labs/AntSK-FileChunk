@@ -10,11 +10,11 @@ AntSK 语义文本切片服务
 - 多语言支持 (中文/英文)
 """
 
-from .semantic_chunker import SemanticChunker, ChunkConfig, TextChunk
-from .document_parser import DocumentParser, DocumentContent
-from .semantic_analyzer import SemanticAnalyzer
-from .chunk_optimizer import ChunkOptimizer
-from .quality_evaluator import QualityEvaluator
+from src.antsk_filechunk.core.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk, EnhancedSemanticChunker
+from src.antsk_filechunk.parsers.document_parser import DocumentParser, DocumentContent
+from src.antsk_filechunk.analyzers.semantic_analyzer import SemanticAnalyzer
+from src.antsk_filechunk.optimizers.chunk_optimizer import ChunkOptimizer
+from src.antsk_filechunk.evaluators.quality_evaluator import QualityEvaluator
 
 __version__ = "1.0.0"
 __author__ = "AntSK Team"
@@ -23,6 +23,7 @@ __email__ = "support@antsk.com"
 __all__ = [
     # 主要类
     "SemanticChunker",
+    "EnhancedSemanticChunker",
     "ChunkConfig", 
     "TextChunk",
     
