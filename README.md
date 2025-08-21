@@ -9,7 +9,7 @@
 
 **基于语义理解的智能文本切片服务，专为 RAG 应用优化**
 
-[快速开始](#快速开始) • [功能特性](#核心特性) • [API文档](#api-服务) • [使用指南](#使用指南) • [项目文档](docs/)
+[快速开始](#快速开始) • [Docker部署](DOCKER_QUICKSTART.md) • [功能特性](#核心特性) • [API文档](#api-服务) • [使用指南](#使用指南) • [项目文档](docs/)
 
 </div>
 
@@ -115,11 +115,26 @@ AntSK-FileChunk/
 ## 🚀 快速开始
 
 ### 环境要求
-- Python 3.8+
+- Python 3.8+ 或 Docker 20.10+
 - 8GB+ RAM (推荐)
 - CUDA GPU (可选，加速语义向量计算)
 
-### 1. 安装依赖
+### 方式一：Docker 部署（推荐）
+
+```bash
+# 克隆项目
+git clone https://github.com/xuzeyu91/AntSK-FileChunk.git
+cd AntSK-FileChunk
+
+# 一键启动
+docker-compose up -d
+
+# 访问服务
+# Web界面: http://localhost:8000
+# API文档: http://localhost:8000/docs
+```
+
+### 方式二：本地安装
 
 ```bash
 # 克隆项目
@@ -467,6 +482,14 @@ mypy src/
 - [python-docx](https://python-docx.readthedocs.io/) - Word文档解析
 - [FastAPI](https://fastapi.tiangolo.com/) - API服务框架
 - [scikit-learn](https://scikit-learn.org/) - 机器学习工具
+
+## 📚 相关文档
+
+- [🐳 Docker 快速开始](DOCKER_QUICKSTART.md)
+- [🐳 Docker 完整部署指南](docs/DOCKER_DEPLOYMENT.md)
+- [📖 API 使用文档](docs/API_README.md)
+- [⚡ 部署优化建议](docs/优化建议.md)
+- [🧠 语义切片算法详解](docs/语义切片逻辑详解.md)
 
 ## 📞 联系我们
 
