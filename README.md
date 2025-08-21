@@ -343,35 +343,6 @@ config = ChunkConfig(
 - **Token估算**: 各切片的Token数量估算
 - **边界质量**: 切片边界的语义合理性评分
 
-## 🧪 测试
-
-### 运行测试套件
-```bash
-# 运行所有测试
-python -m pytest tests/ -v
-
-# 运行单元测试
-python -m pytest tests/unit/ -v
-
-# 运行集成测试
-python -m pytest tests/integration/ -v
-
-# 生成覆盖率报告
-python -m pytest tests/ --cov=src --cov-report=html
-```
-
-### 性能测试
-```bash
-# 测试切片长度分布
-python test_chunk_length.py
-
-# 测试语义完整性
-python test_semantic_integrity.py
-
-# API性能测试
-python test_api.py
-```
-
 ## 📈 性能特性
 
 ### 计算复杂度
