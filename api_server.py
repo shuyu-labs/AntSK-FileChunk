@@ -104,9 +104,19 @@ async def startup_event():
         raise
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    """首页 - 测试界面"""
-    return templates.TemplateResponse("index.html", {"request": request})
+async def root():
+    """根路径重定向到主页"""
+    return FileResponse("home.html")
+
+@app.get("/home", response_class=HTMLResponse)
+async def home():
+    """主页 - 产品介绍页面"""
+    return FileResponse("home.html")
+
+@app.get("/chunker", response_class=HTMLResponse)
+async def chunker():
+    """文档切片工具页面"""
+    return FileResponse("chunker.html")
 
 @app.get("/health")
 async def health_check():

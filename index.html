@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel智能分析助手 - AI驱动的Excel数据分析平台 | AntSK ExcelAgent</title>
+    
+    <!-- SEO 元标签 -->
+    <meta name="description" content="Excel智能分析助手，基于AI技术的Excel数据分析平台。上传Excel文件，通过自然语言对话进行数据分析、图表生成、趋势预测。专业的企业级数据分析解决方案。">
+    <meta name="keywords" content="Excel分析,数据分析,AI助手,ExcelAgent,AntSK,智能分析,数据可视化,Excel工具,商业智能,数据挖掘,表格分析,AI对话分析">
+    <meta name="author" content="AntSK Team">
+    <meta name="robots" content="index, follow">
+    <meta name="language" content="zh-CN">
+    
+    <!-- Open Graph 标签 -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Excel智能分析助手 - AI驱动的Excel数据分析平台">
+    <meta property="og:description" content="基于AI技术的Excel数据分析平台，通过自然语言对话轻松分析数据，生成图表和洞察报告。">
+    <meta property="og:site_name" content="AntSK ExcelAgent">
+    <meta property="og:locale" content="zh_CN">
+    
+    <!-- 预加载关键资源 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- 结构化数据 -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Excel智能分析助手",
+        "applicationCategory": "BusinessApplication",
+        "description": "基于AI技术的Excel数据分析平台，通过自然语言对话进行数据分析、图表生成、趋势预测",
+        "operatingSystem": "Web Browser",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "CNY"
+        },
+        "creator": {
+            "@type": "Organization",
+            "name": "AntSK Team",
+            "url": "https://antsk.cn"
+        },
+        "featureList": [
+            "Excel文件智能上传",
+            "自然语言数据查询",
+            "AI驱动图表生成",
+            "数据趋势分析",
+            "多格式数据支持",
+            "实时对话分析"
+        ]
+    }
+    </script>
+    
+    <style>
+        :root {
+            --primary-color: #7F7FFF;
+            --primary-gradient: linear-gradient(135deg, #7F7FFF 0%, #8F8FFF 100%);
+            --secondary-color: #f8f9ff;
+            --accent-color: #667eea;
+            --text-color: #333;
+            --text-light: #666;
+            --background: #ffffff;
+            --surface: rgba(255, 255, 255, 0.95);
+            --border: #e0e6ff;
+            --shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 25px 50px rgba(127, 127, 255, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background: linear-gradient(135deg, #f8f9ff 0%, #e6f3ff 50%, #f0f4ff 100%);
+            min-height: 100vh;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 0;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .cta-button {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(127, 127, 255, 0.3);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(127, 127, 255, 0.4);
+        }
+
+        /* 英雄区域 */
+        .hero {
+            padding: 8rem 2rem 4rem;
+            text-align: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-light);
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 3rem;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 30px 60px rgba(127, 127, 255, 0.25);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--primary-color);
+            padding: 1rem 2rem;
+            border: 2px solid var(--primary-color);
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* 特性展示 */
+        .features {
+            padding: 4rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            scroll-margin-top: 100px; /* 为固定导航栏留出空间 */
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .section-subtitle {
+            text-align: center;
+            font-size: 1.1rem;
+            color: var(--text-light);
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 1px solid var(--border);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .feature-description {
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+
+        /* 使用流程 */
+        .how-it-works {
+            background: var(--surface);
+            padding: 4rem 2rem;
+            margin: 4rem 0;
+            scroll-margin-top: 100px; /* 为固定导航栏留出空间 */
+        }
+
+        .steps-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .step {
+            text-align: center;
+            position: relative;
+        }
+
+        .step-number {
+            width: 60px;
+            height: 60px;
+            background: var(--primary-gradient);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 0 auto 1rem;
+            box-shadow: 0 8px 20px rgba(127, 127, 255, 0.3);
+        }
+
+        .step-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .step-description {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+
+        /* 优势展示 */
+        .advantages {
+            padding: 4rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            scroll-margin-top: 100px; /* 为固定导航栏留出空间 */
+        }
+
+        .advantages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 3rem;
+        }
+
+        .advantage-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1.5rem;
+            background: var(--surface);
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+        }
+
+        .advantage-item:hover {
+            transform: translateY(-3px);
+        }
+
+        .advantage-icon {
+            font-size: 2rem;
+            color: var(--primary-color);
+            flex-shrink: 0;
+        }
+
+        .advantage-content h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .advantage-content p {
+            color: var(--text-light);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* 行动召唤 */
+        .cta-section {
+            background: var(--primary-gradient);
+            color: white;
+            text-align: center;
+            padding: 4rem 2rem;
+            margin: 4rem 0 0;
+        }
+
+        .cta-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .cta-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .cta-subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+
+        .btn-white {
+            background: white;
+            color: var(--primary-color);
+            padding: 1rem 2.5rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 8px 25px rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-white:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(255, 255, 255, 0.3);
+        }
+
+        /* 页脚 */
+        .footer {
+            background: #f8f9ff;
+            padding: 3rem 2rem 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+
+        .footer-section h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 0.5rem;
+        }
+
+        .footer-links a {
+            color: var(--text-light);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .footer-bottom {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-light);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .nav-container {
+                padding: 0 1rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .hero {
+                padding: 6rem 1rem 3rem;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn-primary, .btn-secondary {
+                width: 100%;
+                max-width: 300px;
+                justify-content: center;
+            }
+
+            .features, .advantages {
+                padding: 3rem 1rem;
+            }
+
+            .how-it-works {
+                padding: 3rem 1rem;
+            }
+
+            .cta-section {
+                padding: 3rem 1rem;
+            }
+
+            .footer {
+                padding: 2rem 1rem 1rem;
+            }
+        }
+
+        /* 动画效果 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        /* 滚动指示器 */
+        .scroll-indicator {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-light);
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translateX(-50%) translateY(0);
+            }
+            40% {
+                transform: translateX(-50%) translateY(-10px);
+            }
+            60% {
+                transform: translateX(-50%) translateY(-5px);
+            }
+        }
+
+        /* 弹出框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 0;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+            animation: modalSlideIn 0.3s ease;
+            overflow: hidden;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px) scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .modal-header {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 20px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: white;
+            transition: all 0.3s ease;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .close:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+
+        .modal-body {
+            padding: 30px 25px;
+            text-align: center;
+        }
+
+        .modal-body p {
+            margin: 0 0 20px 0;
+            color: var(--text-color);
+            font-size: 1.1rem;
+        }
+
+        .qr-container {
+            margin: 25px 0;
+            padding: 20px;
+            background: var(--secondary-color);
+            border-radius: 15px;
+            display: inline-block;
+        }
+
+        .qr-code {
+            max-width: 200px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .contact-info {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 12px;
+            line-height: 1.8;
+            color: var(--text-light);
+            font-size: 0.95rem;
+            margin-top: 20px;
+        }
+
+        .contact-info a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .contact-info a:hover {
+            text-decoration: underline;
+        }
+
+        /* 响应式弹出框 */
+        @media (max-width: 768px) {
+            .modal-content {
+                margin: 20% auto;
+                width: 95%;
+                max-width: 400px;
+            }
+
+            .modal-header, .modal-body {
+                padding: 15px 20px;
+            }
+
+            .qr-code {
+                max-width: 150px;
+            }
+
+            .modal-header h3 {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body id="top">
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="#top" class="logo" onclick="scrollToTop(event)">
+                📊 ExcelAgent
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">功能特色</a></li>
+                <li><a href="#how-it-works">使用方法</a></li>
+                <li><a href="#advantages">产品优势</a></li>
+                <li><a href="#" onclick="showContactModal()">联系我们</a></li>
+            </ul>
+            <a href="/analyzer" class="cta-button">立即体验</a>
+        </div>
+    </nav>
+
+    <!-- 英雄区域 -->
+    <section class="hero">
+        <h1>Excel智能分析助手</h1>
+        <p class="hero-subtitle">
+            基于AI技术的Excel数据分析平台，通过自然语言对话轻松分析数据，
+            生成专业图表和深度洞察报告，让数据分析变得简单高效。
+        </p>
+        <div class="hero-buttons">
+            <a href="/analyzer" class="btn-primary">
+                🚀 立即开始分析
+            </a>
+            <a href="#features" class="btn-secondary">
+                了解更多功能
+            </a>
+        </div>
+    </section>
+
+    <!-- 功能特色 -->
+    <section id="features" class="features">
+        <h2 class="section-title">核心功能特色</h2>
+        <p class="section-subtitle">
+            强大的AI驱动功能，让Excel数据分析变得前所未有的简单
+        </p>
+        <div class="features-grid">
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🤖</div>
+                <h3 class="feature-title">AI对话分析</h3>
+                <p class="feature-description">
+                    使用自然语言提问，AI智能理解您的需求，
+                    自动执行复杂的数据分析操作，无需编程知识。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">📈</div>
+                <h3 class="feature-title">智能图表生成</h3>
+                <p class="feature-description">
+                    根据数据特征和分析需求，自动生成最适合的图表类型，
+                    包括柱状图、折线图、散点图等多种可视化形式。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🔍</div>
+                <h3 class="feature-title">深度数据洞察</h3>
+                <p class="feature-description">
+                    AI自动识别数据模式、趋势和异常值，
+                    提供专业的数据解读和商业建议。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">⚡</div>
+                <h3 class="feature-title">实时处理</h3>
+                <p class="feature-description">
+                    支持大文件快速上传和处理，实时显示分析过程，
+                    让您清楚了解每一步分析操作。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🔒</div>
+                <h3 class="feature-title">数据安全</h3>
+                <p class="feature-description">
+                    采用企业级安全标准，数据传输加密，
+                    严格保护您的商业数据安全。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🌐</div>
+                <h3 class="feature-title">多格式支持</h3>
+                <p class="feature-description">
+                    支持.xlsx、.xls、.csv等多种Excel格式，
+                    兼容性强，使用便捷。
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 使用流程 -->
+    <section id="how-it-works" class="how-it-works">
+        <div class="steps-container">
+            <h2 class="section-title">如何使用</h2>
+            <p class="section-subtitle">
+                三步即可开始您的智能数据分析之旅
+            </p>
+            <div class="steps">
+                <div class="step fade-in">
+                    <div class="step-number">1</div>
+                    <h3 class="step-title">上传Excel文件</h3>
+                    <p class="step-description">
+                        点击上传按钮或拖拽Excel文件到指定区域，
+                        系统将自动解析您的数据结构。
+                    </p>
+                </div>
+                <div class="step fade-in">
+                    <div class="step-number">2</div>
+                    <h3 class="step-title">自然语言提问</h3>
+                    <p class="step-description">
+                        用日常语言描述您的分析需求，
+                        如"分析销售趋势"、"找出最佳客户群体"等。
+                    </p>
+                </div>
+                <div class="step fade-in">
+                    <div class="step-number">3</div>
+                    <h3 class="step-title">获得智能分析</h3>
+                    <p class="step-description">
+                        AI将自动执行分析，生成图表和报告，
+                        提供专业的数据洞察和建议。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 产品优势 -->
+    <section id="advantages" class="advantages">
+        <h2 class="section-title">为什么选择我们</h2>
+        <p class="section-subtitle">
+            专业、高效、智能的数据分析解决方案
+        </p>
+        <div class="advantages-grid">
+            <div class="advantage-item fade-in">
+                <div class="advantage-icon">💡</div>
+                <div class="advantage-content">
+                    <h3>零门槛使用</h3>
+                    <p>无需学习复杂的Excel公式或编程语言，人人都能成为数据分析师</p>
+                </div>
+            </div>
+            <div class="advantage-item fade-in">
+                <div class="advantage-icon">⏰</div>
+                <div class="advantage-content">
+                    <h3>效率提升100倍</h3>
+                    <p>原本需要几小时的分析工作，现在只需几分钟即可完成</p>
+                </div>
+            </div>
+            <div class="advantage-item fade-in">
+                <div class="advantage-icon">🎯</div>
+                <div class="advantage-content">
+                    <h3>精准洞察</h3>
+                    <p>AI算法深度挖掘数据价值，发现人工难以察觉的数据模式</p>
+                </div>
+            </div>
+            <div class="advantage-item fade-in">
+                <div class="advantage-icon">📱</div>
+                <div class="advantage-content">
+                    <h3>随时随地访问</h3>
+                    <p>基于Web的应用，支持电脑、平板、手机等多种设备访问</p>
+                </div>
+            </div>
+            <div class="advantage-item fade-in">
+                <div class="advantage-icon">🔄</div>
+                <div class="advantage-content">
+                    <h3>持续学习优化</h3>
+                    <p>AI模型持续学习和优化，分析能力不断提升</p>
+                </div>
+            </div>
+            <div class="advantage-item fade-in">
+                <div class="advantage-icon">🏢</div>
+                <div class="advantage-content">
+                    <h3>企业级可靠性</h3>
+                    <p>稳定的服务架构，支持大规模企业级应用场景</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 行动召唤 -->
+    <section class="cta-section">
+        <div class="cta-content">
+            <h2 class="cta-title">准备开始您的智能分析之旅？</h2>
+            <p class="cta-subtitle">
+                加入数万名用户，体验AI驱动的Excel数据分析革命
+            </p>
+            <a href="/analyzer" class="btn-white">
+                🚀 立即免费体验
+            </a>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>📊 ExcelAgent</h3>
+                <p style="color: var(--text-light); margin-top: 0.5rem;">
+                    专业的AI驱动Excel数据分析平台，
+                    让数据分析变得简单高效。
+                </p>
+            </div>
+            <div class="footer-section">
+                <h3>产品功能</h3>
+                <ul class="footer-links">
+                    <li><a href="#features">AI对话分析</a></li>
+                    <li><a href="#features">智能图表生成</a></li>
+                    <li><a href="#features">数据洞察</a></li>
+                    <li><a href="#features">实时处理</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>关于我们</h3>
+                <ul class="footer-links">
+                    <li><a href="https://antsk.cn/" target="_blank">AntSK产品</a></li>
+                    <li><a href="https://www.tree456.com/" target="_blank">公司官网</a></li>
+                    <li><a href="#contact">联系我们</a></li>
+                    <li><a href="#privacy">隐私政策</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>技术支持</h3>
+                <ul class="footer-links">
+                    <li><a href="#help">使用帮助</a></li>
+                    <li><a href="#faq">常见问题</a></li>
+                    <li><a href="#api">API文档</a></li>
+                    <li><a href="#feedback">意见反馈</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 AntSK Team. 保留所有权利. | 基于AI技术驱动的Excel智能分析平台</p>
+        </div>
+    </footer>
+
+    <!-- 联系我们弹出框 -->
+    <div id="contactModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>联系我们</h3>
+                <span class="close" onclick="hideContactModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>扫描二维码联系我们</p>
+                <div class="qr-container">
+                    <img src="/static/images/erweima.png" alt="联系二维码" class="qr-code">
+                </div>
+                <p class="contact-info">
+                    🌐 官网：<a href="https://tree456.com/" target="_blank">https://tree456.com/</a><br>
+                    📞 技术支持：13469996907
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    const navbarHeight = document.querySelector('.navbar').offsetHeight;
+                    const targetPosition = target.offsetTop - navbarHeight - 20; // 额外留20px空间
+                    
+                    window.scrollTo({
+                        top: targetPosition,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+
+        // 滚动动画
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('fade-in');
+                }
+            });
+        }, observerOptions);
+
+        // 观察所有需要动画的元素
+        document.querySelectorAll('.feature-card, .step, .advantage-item').forEach(el => {
+            observer.observe(el);
+        });
+
+        // 导航栏滚动效果
+        window.addEventListener('scroll', function() {
+            const navbar = document.querySelector('.navbar');
+            if (window.scrollY > 100) {
+                navbar.style.background = 'rgba(255, 255, 255, 0.98)';
+                navbar.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
+            } else {
+                navbar.style.background = 'rgba(255, 255, 255, 0.95)';
+                navbar.style.boxShadow = 'none';
+            }
+        });
+
+        // 联系我们弹出框功能
+        function showContactModal() {
+            const modal = document.getElementById('contactModal');
+            if (modal) {
+                modal.style.display = 'block';
+                document.body.style.overflow = 'hidden'; // 防止背景滚动
+            }
+        }
+
+        function hideContactModal() {
+            const modal = document.getElementById('contactModal');
+            if (modal) {
+                modal.style.display = 'none';
+                document.body.style.overflow = 'auto'; // 恢复滚动
+            }
+        }
+
+        // 点击弹出框外部关闭
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('contactModal');
+            if (event.target === modal) {
+                hideContactModal();
+            }
+        });
+
+        // ESC键关闭弹出框
+        window.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                hideContactModal();
+            }
+        });
+
+        // 滚动到顶部功能
+        function scrollToTop(event) {
+            event.preventDefault();
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // 页面加载完成提示
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Excel智能分析助手主页已加载完成');
+            
+            // 隐藏滚动指示器
+            setTimeout(function() {
+                const scrollIndicator = document.querySelector('.scroll-indicator');
+                if (scrollIndicator) {
+                    scrollIndicator.style.opacity = '0.7';
+                }
+            }, 3000);
+        });
+    </script>
+</body>
+</html>

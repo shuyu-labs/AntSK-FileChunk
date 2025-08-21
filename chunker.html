@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AntSK 智能文档切片工具 - 语义文本切片服务</title>
+    
+    <!-- SEO 元标签 -->
+    <meta name="description" content="AntSK智能文档切片工具，支持PDF、Word、TXT等多种格式文档的语义切片处理。基于AI语义理解，确保切片的语义完整性。">
+    <meta name="keywords" content="文档切片,语义分析,文档处理,RAG,AI切片,文本分析">
+    <meta name="author" content="AntSK Team">
+    
+    <!-- 预加载关键资源 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #7F7FFF;
+            --primary-gradient: linear-gradient(135deg, #7F7FFF 0%, #8F8FFF 100%);
+            --secondary-color: #f8f9ff;
+            --accent-color: #667eea;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --text-color: #333;
+            --text-light: #666;
+            --text-muted: #9ca3af;
+            --background: #ffffff;
+            --surface: rgba(255, 255, 255, 0.95);
+            --border: #e0e6ff;
+            --shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 25px 50px rgba(127, 127, 255, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background: linear-gradient(135deg, #f8f9ff 0%, #e6f3ff 50%, #f0f4ff 100%);
+            min-height: 100vh;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 0;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
+
+        /* 主容器 */
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 6rem 2rem 2rem;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .page-title {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .page-subtitle {
+            font-size: 1.2rem;
+            color: var(--text-light);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* 标签页 */
+        .tabs {
+            background: white;
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .tab-nav {
+            display: flex;
+            background: var(--secondary-color);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 1.5rem 2rem;
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-light);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tab-button.active {
+            color: var(--primary-color);
+            background: white;
+        }
+
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary-gradient);
+        }
+
+        .tab-content {
+            display: none;
+            padding: 2rem;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 文件上传区域 */
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 15px;
+            padding: 3rem 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: var(--secondary-color);
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--primary-color);
+            background: rgba(127, 127, 255, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .upload-text {
+            font-size: 1.1rem;
+            color: var(--text-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-hint {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .selected-file {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .file-icon {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .file-size {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        .remove-file {
+            background: none;
+            border: none;
+            color: var(--error-color);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0.5rem;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .remove-file:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        /* 文本输入区域 */
+        .text-input-area {
+            margin-bottom: 2rem;
+        }
+
+        .text-input {
+            width: 100%;
+            min-height: 300px;
+            padding: 1.5rem;
+            border: 2px solid var(--border);
+            border-radius: 15px;
+            font-family: inherit;
+            font-size: 1rem;
+            line-height: 1.6;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+            background: white;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(127, 127, 255, 0.1);
+        }
+
+        .text-counter {
+            text-align: right;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        /* 配置面板 */
+        .config-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow);
+        }
+
+        .config-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .config-label {
+            font-weight: 500;
+            color: var(--text-color);
+            font-size: 0.95rem;
+        }
+
+        .config-input {
+            padding: 0.75rem 1rem;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+            background: white;
+        }
+
+        .config-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(127, 127, 255, 0.1);
+        }
+
+        .config-hint {
+            font-size: 0.85rem;
+            color: var(--text-light);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 26px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        /* 处理按钮 */
+        .process-button {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 1rem 3rem;
+            border-radius: 30px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 2rem auto;
+        }
+
+        .process-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 30px 60px rgba(127, 127, 255, 0.25);
+        }
+
+        .process-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 加载状态 */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-light);
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 结果展示 */
+        .results {
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .results-header {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow);
+        }
+
+        .results-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .results-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+            background: var(--secondary-color);
+            border-radius: 10px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            margin-top: 0.5rem;
+        }
+
+        .chunks-container {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .chunk-card {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .chunk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .chunk-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .chunk-meta {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            background: var(--secondary-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            color: var(--text-color);
+        }
+
+        .chunk-content {
+            background: #f9fafb;
+            padding: 1.5rem;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--text-color);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .semantic-score {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .score-bar {
+            width: 100px;
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            background: var(--primary-gradient);
+            transition: width 0.3s ease;
+        }
+
+        /* 错误提示 */
+        .error-message {
+            background: #fee2e2;
+            color: var(--error-color);
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            border: 1px solid #fecaca;
+            margin: 1rem 0;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        /* 成功提示 */
+        .success-message {
+            background: #d1fae5;
+            color: var(--success-color);
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            border: 1px solid #a7f3d0;
+            margin: 1rem 0;
+            display: none;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .nav-container {
+                padding: 0 1rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .main-container {
+                padding: 6rem 1rem 2rem;
+            }
+
+            .page-title {
+                font-size: 2.5rem;
+            }
+
+            .tab-nav {
+                flex-direction: column;
+            }
+
+            .tab-button {
+                text-align: center;
+            }
+
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chunk-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* 动画效果 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/home" class="logo">
+                🔥 AntSK FileChunk
+            </a>
+            <ul class="nav-links">
+                <li><a href="/home">首页</a></li>
+                <li><a href="/docs">API文档</a></li>
+                <li><a href="/health">服务状态</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- 主容器 -->
+    <div class="main-container">
+        <!-- 页面头部 -->
+        <div class="page-header">
+            <h1 class="page-title">智能文档切片工具</h1>
+            <p class="page-subtitle">
+                上传文档或输入文本，体验基于语义理解的智能文档切片服务
+            </p>
+        </div>
+
+        <!-- 标签页 -->
+        <div class="tabs">
+            <div class="tab-nav">
+                <button class="tab-button active" onclick="switchTab('file')">
+                    📁 文件上传
+                </button>
+                <button class="tab-button" onclick="switchTab('text')">
+                    📝 文本输入
+                </button>
+                <button class="tab-button" onclick="switchTab('api')">
+                    📚 API说明
+                </button>
+            </div>
+
+            <!-- 文件上传标签页 -->
+            <div class="tab-content active" id="file-tab">
+                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon">📎</div>
+                    <div class="upload-text">点击选择文件或拖拽文件到此处</div>
+                    <div class="upload-hint">支持 PDF、Word(.docx)、纯文本(.txt) 格式，最大 50MB</div>
+                </div>
+                <input type="file" id="fileInput" class="file-input" accept=".pdf,.docx,.doc,.txt" onchange="handleFileSelect(event)">
+                <div id="selectedFile" class="selected-file" style="display: none;">
+                    <div class="file-icon">📄</div>
+                    <div class="file-info">
+                        <div class="file-name" id="fileName"></div>
+                        <div class="file-size" id="fileSize"></div>
+                    </div>
+                    <button class="remove-file" onclick="removeFile()">×</button>
+                </div>
+            </div>
+
+            <!-- 文本输入标签页 -->
+            <div class="tab-content" id="text-tab">
+                <div class="text-input-area">
+                    <textarea 
+                        id="textInput" 
+                        class="text-input" 
+                        placeholder="请输入要进行语义切片的文本内容..."
+                        oninput="updateTextCounter()"
+                    ></textarea>
+                    <div class="text-counter">
+                        <span id="textCount">0</span> 字符
+                    </div>
+                </div>
+            </div>
+
+            <!-- API说明标签页 -->
+            <div class="tab-content" id="api-tab">
+                <div style="background: white; padding: 2rem; border-radius: 15px;">
+                    <h3 style="margin-bottom: 1rem; color: var(--text-color);">📚 API接口说明</h3>
+                    
+                    <h4 style="margin: 1.5rem 0 0.5rem; color: var(--primary-color);">文件处理接口</h4>
+                    <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        <code>POST /api/process-file</code>
+                    </div>
+                    <p style="color: var(--text-light); margin-bottom: 1rem;">
+                        上传文件进行语义切片处理，支持PDF、Word、TXT格式。
+                    </p>
+                    
+                    <h4 style="margin: 1.5rem 0 0.5rem; color: var(--primary-color);">文本处理接口</h4>
+                    <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        <code>POST /api/process-text</code>
+                    </div>
+                    <p style="color: var(--text-light); margin-bottom: 1rem;">
+                        直接处理文本内容进行语义切片。
+                    </p>
+                    
+                    <h4 style="margin: 1.5rem 0 0.5rem; color: var(--primary-color);">获取默认配置</h4>
+                    <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        <code>GET /api/config/default</code>
+                    </div>
+                    <p style="color: var(--text-light); margin-bottom: 1rem;">
+                        获取系统默认的切片配置参数。
+                    </p>
+                    
+                    <p style="color: var(--text-light);">
+                        更多详细信息请访问 <a href="/docs" target="_blank" style="color: var(--primary-color);">Swagger API文档</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 配置面板 -->
+        <div class="config-panel">
+            <h3 class="config-title">
+                ⚙️ 切片配置参数
+            </h3>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label class="config-label">目标切片大小</label>
+                    <input type="number" id="targetChunkSize" class="config-input" value="800" min="200" max="2000">
+                    <div class="config-hint">推荐范围: 600-1200 字符</div>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">最小切片大小</label>
+                    <input type="number" id="minChunkSize" class="config-input" value="200" min="50" max="1000">
+                    <div class="config-hint">最小 50 字符</div>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">最大切片大小</label>
+                    <input type="number" id="maxChunkSize" class="config-input" value="1500" min="500" max="5000">
+                    <div class="config-hint">最大 5000 字符</div>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">语义相似度阈值</label>
+                    <input type="number" id="semanticThreshold" class="config-input" value="0.7" min="0" max="1" step="0.1">
+                    <div class="config-hint">0.0-1.0，越高越严格</div>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">重叠比例</label>
+                    <input type="number" id="overlapRatio" class="config-input" value="0.1" min="0" max="0.5" step="0.05">
+                    <div class="config-hint">切片间重叠比例</div>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">语言设置</label>
+                    <select id="language" class="config-input">
+                        <option value="zh">中文</option>
+                        <option value="en">英文</option>
+                    </select>
+                    <div class="config-hint">选择文档主要语言</div>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">保持文档结构</label>
+                    <label class="switch">
+                        <input type="checkbox" id="preserveStructure" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <div class="config-hint">保持章节段落结构</div>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">处理特殊内容</label>
+                    <label class="switch">
+                        <input type="checkbox" id="handleSpecialContent" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <div class="config-hint">处理表格、图片等</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 处理按钮 -->
+        <button class="process-button" id="processBtn" onclick="processDocument()">
+            🚀 开始智能切片
+        </button>
+
+        <!-- 错误提示 -->
+        <div class="error-message" id="errorMessage"></div>
+
+        <!-- 成功提示 -->
+        <div class="success-message" id="successMessage"></div>
+
+        <!-- 加载状态 -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>正在进行语义分析和智能切片...</p>
+        </div>
+
+        <!-- 结果展示 -->
+        <div class="results" id="results">
+            <div class="results-header">
+                <h2 class="results-title">切片结果</h2>
+                <div class="results-stats" id="resultsStats">
+                    <!-- 统计信息将通过JavaScript填充 -->
+                </div>
+            </div>
+            <div class="chunks-container" id="chunksContainer">
+                <!-- 切片结果将通过JavaScript填充 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+
+        // 标签页切换
+        function switchTab(tabName) {
+            // 隐藏所有标签页内容
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // 移除所有按钮的激活状态
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // 显示选中的标签页内容
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // 激活对应的按钮
+            event.target.classList.add('active');
+        }
+
+        // 文件选择处理
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                selectedFile = file;
+                showSelectedFile(file);
+            }
+        }
+
+        // 显示选中的文件
+        function showSelectedFile(file) {
+            const selectedFileDiv = document.getElementById('selectedFile');
+            const fileName = document.getElementById('fileName');
+            const fileSize = document.getElementById('fileSize');
+            
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            selectedFileDiv.style.display = 'flex';
+        }
+
+        // 移除文件
+        function removeFile() {
+            selectedFile = null;
+            document.getElementById('selectedFile').style.display = 'none';
+            document.getElementById('fileInput').value = '';
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 更新文本计数器
+        function updateTextCounter() {
+            const textInput = document.getElementById('textInput');
+            const textCount = document.getElementById('textCount');
+            textCount.textContent = textInput.value.length;
+        }
+
+        // 拖拽上传处理
+        const uploadArea = document.querySelector('.upload-area');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (isValidFile(file)) {
+                    selectedFile = file;
+                    showSelectedFile(file);
+                } else {
+                    showError('不支持的文件格式，请上传 PDF、Word 或 TXT 文件');
+                }
+            }
+        });
+
+        // 验证文件类型
+        function isValidFile(file) {
+            const validTypes = ['.pdf', '.docx', '.doc', '.txt'];
+            const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+            return validTypes.includes(fileExt);
+        }
+
+        // 获取配置参数
+        function getConfig() {
+            return {
+                min_chunk_size: parseInt(document.getElementById('minChunkSize').value),
+                max_chunk_size: parseInt(document.getElementById('maxChunkSize').value),
+                target_chunk_size: parseInt(document.getElementById('targetChunkSize').value),
+                semantic_threshold: parseFloat(document.getElementById('semanticThreshold').value),
+                overlap_ratio: parseFloat(document.getElementById('overlapRatio').value),
+                language: document.getElementById('language').value,
+                preserve_structure: document.getElementById('preserveStructure').checked,
+                handle_special_content: document.getElementById('handleSpecialContent').checked
+            };
+        }
+
+        // 处理文档
+        async function processDocument() {
+            // 检查输入
+            const activeTab = document.querySelector('.tab-content.active').id;
+            const isFileTab = activeTab === 'file-tab';
+            const isTextTab = activeTab === 'text-tab';
+
+            if (isFileTab && !selectedFile) {
+                showError('请选择要处理的文件');
+                return;
+            }
+
+            if (isTextTab) {
+                const textInput = document.getElementById('textInput').value.trim();
+                if (!textInput) {
+                    showError('请输入要处理的文本内容');
+                    return;
+                }
+            }
+
+            // 显示加载状态
+            showLoading(true);
+            hideError();
+            hideSuccess();
+            hideResults();
+
+            try {
+                let response;
+                const config = getConfig();
+
+                if (isFileTab) {
+                    // 文件处理
+                    const formData = new FormData();
+                    formData.append('file', selectedFile);
+                    formData.append('config', JSON.stringify(config));
+
+                    response = await fetch('/api/process-file', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    // 文本处理
+                    const textInput = document.getElementById('textInput').value;
+                    const formData = new FormData();
+                    formData.append('text', textInput);
+                    formData.append('config', JSON.stringify(config));
+
+                    response = await fetch('/api/process-text', {
+                        method: 'POST',
+                        body: formData
+                    });
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '处理失败');
+                }
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showSuccess(`处理完成！共生成 ${result.total_chunks} 个切片，耗时 ${result.processing_time.toFixed(2)} 秒`);
+                    showResults(result);
+                } else {
+                    throw new Error(result.message || '处理失败');
+                }
+
+            } catch (error) {
+                console.error('处理错误:', error);
+                showError('处理失败: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // 显示/隐藏加载状态
+        function showLoading(show) {
+            const loading = document.getElementById('loading');
+            const processBtn = document.getElementById('processBtn');
+            
+            if (show) {
+                loading.classList.add('show');
+                processBtn.disabled = true;
+                processBtn.textContent = '处理中...';
+            } else {
+                loading.classList.remove('show');
+                processBtn.disabled = false;
+                processBtn.innerHTML = '🚀 开始智能切片';
+            }
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+            setTimeout(() => {
+                errorDiv.classList.remove('show');
+            }, 5000);
+        }
+
+        // 隐藏错误信息
+        function hideError() {
+            document.getElementById('errorMessage').classList.remove('show');
+        }
+
+        // 显示成功信息
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.classList.add('show');
+            setTimeout(() => {
+                successDiv.classList.remove('show');
+            }, 5000);
+        }
+
+        // 隐藏成功信息
+        function hideSuccess() {
+            document.getElementById('successMessage').classList.remove('show');
+        }
+
+        // 显示结果
+        function showResults(result) {
+            const resultsDiv = document.getElementById('results');
+            const statsDiv = document.getElementById('resultsStats');
+            const chunksDiv = document.getElementById('chunksContainer');
+
+            // 显示统计信息
+            const avgScore = result.chunks.reduce((sum, chunk) => sum + chunk.semantic_score, 0) / result.chunks.length;
+            const avgLength = result.chunks.reduce((sum, chunk) => sum + chunk.content.length, 0) / result.chunks.length;
+            const totalTokens = result.chunks.reduce((sum, chunk) => sum + chunk.token_count, 0);
+
+            statsDiv.innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-value">${result.total_chunks}</div>
+                    <div class="stat-label">切片总数</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${avgScore.toFixed(2)}</div>
+                    <div class="stat-label">平均语义得分</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${Math.round(avgLength)}</div>
+                    <div class="stat-label">平均切片长度</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${totalTokens}</div>
+                    <div class="stat-label">总Token数</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${result.processing_time.toFixed(2)}s</div>
+                    <div class="stat-label">处理时间</div>
+                </div>
+            `;
+
+            // 显示切片结果
+            chunksDiv.innerHTML = '';
+            result.chunks.forEach((chunk, index) => {
+                const chunkCard = document.createElement('div');
+                chunkCard.className = 'chunk-card fade-in';
+                chunkCard.innerHTML = `
+                    <div class="chunk-header">
+                        <div class="chunk-title">切片 ${index + 1}</div>
+                        <div class="chunk-meta">
+                            <div class="meta-item">长度: ${chunk.content.length}</div>
+                            <div class="meta-item">Token: ${chunk.token_count}</div>
+                            <div class="meta-item">类型: ${chunk.chunk_type}</div>
+                            <div class="semantic-score">
+                                <span>语义得分:</span>
+                                <div class="score-bar">
+                                    <div class="score-fill" style="width: ${chunk.semantic_score * 100}%"></div>
+                                </div>
+                                <span>${chunk.semantic_score.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chunk-content">${chunk.content}</div>
+                `;
+                chunksDiv.appendChild(chunkCard);
+            });
+
+            resultsDiv.classList.add('show');
+
+            // 滚动到结果区域
+            setTimeout(() => {
+                resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+
+        // 隐藏结果
+        function hideResults() {
+            document.getElementById('results').classList.remove('show');
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('AntSK 智能文档切片工具已加载完成');
+            
+            // 加载默认配置
+            loadDefaultConfig();
+        });
+
+        // 加载默认配置
+        async function loadDefaultConfig() {
+            try {
+                const response = await fetch('/api/config/default');
+                if (response.ok) {
+                    const config = await response.json();
+                    
+                    // 更新配置表单
+                    document.getElementById('minChunkSize').value = config.min_chunk_size;
+                    document.getElementById('maxChunkSize').value = config.max_chunk_size;
+                    document.getElementById('targetChunkSize').value = config.target_chunk_size;
+                    document.getElementById('semanticThreshold').value = config.semantic_threshold;
+                    document.getElementById('overlapRatio').value = config.overlap_ratio;
+                    document.getElementById('language').value = config.language;
+                    document.getElementById('preserveStructure').checked = config.preserve_structure;
+                    document.getElementById('handleSpecialContent').checked = config.handle_special_content;
+                }
+            } catch (error) {
+                console.warn('无法加载默认配置:', error);
+            }
+        }
+    </script>
+</body>
+</html>

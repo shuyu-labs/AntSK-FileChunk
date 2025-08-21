@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AntSK 语义文本切片服务 - 智能文档处理平台 | 基于AI的语义分析</title>
+    
+    <!-- SEO 元标签 -->
+    <meta name="description" content="AntSK语义文本切片服务，基于深度语义理解的智能文档切片工具。支持PDF、Word、TXT等多种格式，专为RAG应用优化，智能识别语义边界，确保切片的语义完整性。">
+    <meta name="keywords" content="语义切片,文档处理,RAG,语义分析,AntSK,智能切片,文档解析,语义理解,AI文档处理,文本分析">
+    <meta name="author" content="AntSK Team">
+    <meta name="robots" content="index, follow">
+    <meta name="language" content="zh-CN">
+    
+    <!-- Open Graph 标签 -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="AntSK 语义文本切片服务 - 智能文档处理平台">
+    <meta property="og:description" content="基于深度语义理解的智能文档切片工具，专门解决传统切片导致的语义割裂问题。">
+    <meta property="og:site_name" content="AntSK FileChunk">
+    <meta property="og:locale" content="zh_CN">
+    
+    <!-- 预加载关键资源 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- 结构化数据 -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "AntSK 语义文本切片服务",
+        "applicationCategory": "BusinessApplication",
+        "description": "基于深度语义理解的智能文档切片工具，专门解决传统基于固定长度或简单分隔符切片导致的语义割裂问题",
+        "operatingSystem": "Web Browser",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "CNY"
+        },
+        "creator": {
+            "@type": "Organization",
+            "name": "AntSK Team",
+            "url": "https://antsk.cn"
+        },
+        "featureList": [
+            "智能语义边界检测",
+            "多格式文档解析",
+            "自适应切片大小",
+            "语义连贯性检测",
+            "质量评估系统",
+            "RESTful API接口"
+        ]
+    }
+    </script>
+    
+    <style>
+        :root {
+            --primary-color: #7F7FFF;
+            --primary-gradient: linear-gradient(135deg, #7F7FFF 0%, #8F8FFF 100%);
+            --secondary-color: #f8f9ff;
+            --accent-color: #667eea;
+            --text-color: #333;
+            --text-light: #666;
+            --background: #ffffff;
+            --surface: rgba(255, 255, 255, 0.95);
+            --border: #e0e6ff;
+            --shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 25px 50px rgba(127, 127, 255, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background: linear-gradient(135deg, #f8f9ff 0%, #e6f3ff 50%, #f0f4ff 100%);
+            min-height: 100vh;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 0;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .cta-button {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(127, 127, 255, 0.3);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(127, 127, 255, 0.4);
+        }
+
+        /* 英雄区域 */
+        .hero {
+            padding: 8rem 2rem 4rem;
+            text-align: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-light);
+            margin-bottom: 2rem;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 3rem;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 30px 60px rgba(127, 127, 255, 0.25);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--primary-color);
+            padding: 1rem 2rem;
+            border: 2px solid var(--primary-color);
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* 特性展示 */
+        .features {
+            padding: 4rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            scroll-margin-top: 100px;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .section-subtitle {
+            text-align: center;
+            font-size: 1.1rem;
+            color: var(--text-light);
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 1px solid var(--border);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .feature-description {
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+
+        /* 架构展示 */
+        .architecture {
+            background: var(--surface);
+            padding: 4rem 2rem;
+            margin: 4rem 0;
+            scroll-margin-top: 100px;
+        }
+
+        .architecture-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .architecture-diagram {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin: 3rem 0;
+            box-shadow: var(--shadow);
+        }
+
+        .architecture-flow {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .arch-step {
+            background: var(--secondary-color);
+            padding: 1.5rem;
+            border-radius: 15px;
+            border: 2px solid var(--border);
+            min-width: 150px;
+            position: relative;
+        }
+
+        .arch-step h4 {
+            color: var(--primary-color);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .arch-step p {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        .arch-arrow {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            margin: 0 1rem;
+        }
+
+        /* 使用场景 */
+        .use-cases {
+            padding: 4rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            scroll-margin-top: 100px;
+        }
+
+        .use-cases-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .use-case-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            border-left: 4px solid var(--primary-color);
+            transition: all 0.3s ease;
+        }
+
+        .use-case-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .use-case-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .use-case-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .use-case-description {
+            color: var(--text-light);
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .use-case-benefits {
+            list-style: none;
+            padding: 0;
+        }
+
+        .use-case-benefits li {
+            color: var(--text-light);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            padding-left: 1rem;
+            position: relative;
+        }
+
+        .use-case-benefits li:before {
+            content: "✓";
+            color: var(--primary-color);
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        /* 行动召唤 */
+        .cta-section {
+            background: var(--primary-gradient);
+            color: white;
+            text-align: center;
+            padding: 4rem 2rem;
+            margin: 4rem 0 0;
+        }
+
+        .cta-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .cta-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .cta-subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+
+        .btn-white {
+            background: white;
+            color: var(--primary-color);
+            padding: 1rem 2.5rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 8px 25px rgba(255, 255, 255, 0.2);
+            margin-right: 1rem;
+        }
+
+        .btn-white:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(255, 255, 255, 0.3);
+        }
+
+        /* 页脚 */
+        .footer {
+            background: #f8f9ff;
+            padding: 3rem 2rem 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+
+        .footer-section h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 0.5rem;
+        }
+
+        .footer-links a {
+            color: var(--text-light);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .footer-bottom {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-light);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .nav-container {
+                padding: 0 1rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .hero {
+                padding: 6rem 1rem 3rem;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn-primary, .btn-secondary {
+                width: 100%;
+                max-width: 300px;
+                justify-content: center;
+            }
+
+            .architecture-flow {
+                flex-direction: column;
+            }
+
+            .arch-arrow {
+                transform: rotate(90deg);
+            }
+
+            .btn-white {
+                margin: 0.5rem;
+            }
+        }
+
+        /* 动画效果 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+    </style>
+</head>
+<body id="top">
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="#top" class="logo" onclick="scrollToTop(event)">
+                🔥 AntSK FileChunk
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">核心特性</a></li>
+                <li><a href="#architecture">技术架构</a></li>
+                <li><a href="#use-cases">使用场景</a></li>
+                <li><a href="/docs">API文档</a></li>
+            </ul>
+            <a href="/chunker" class="cta-button">开始使用</a>
+        </div>
+    </nav>
+
+    <!-- 英雄区域 -->
+    <section class="hero">
+        <h1>AntSK 语义文本切片服务</h1>
+        <p class="hero-subtitle">
+            基于深度语义理解的智能文档切片工具，专门解决传统基于固定长度或简单分隔符切片导致的<strong>语义割裂问题</strong>。
+            通过先进的语义分析技术，智能识别文本的语义边界，确保每个切片在语义上的完整性和连贯性。
+        </p>
+        <div class="hero-buttons">
+            <a href="/chunker" class="btn-primary">
+                🚀 立即开始切片
+            </a>
+            <a href="#features" class="btn-secondary">
+                了解核心特性
+            </a>
+        </div>
+    </section>
+
+    <!-- 核心特性 -->
+    <section id="features" class="features">
+        <h2 class="section-title">核心特性</h2>
+        <p class="section-subtitle">
+            先进的语义分析技术，让文档切片变得智能而精准
+        </p>
+        <div class="features-grid">
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🧠</div>
+                <h3 class="feature-title">智能语义切片</h3>
+                <p class="feature-description">
+                    使用SentenceTransformer模型计算语义向量，通过余弦相似度识别语义边界，
+                    结合长度约束、语义阈值等多重因素进行智能切片决策。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">📚</div>
+                <h3 class="feature-title">多格式文档解析</h3>
+                <p class="feature-description">
+                    支持PDF、Word(.docx)、纯文本(.txt)等多种格式，
+                    智能识别并保持文档的章节、段落、表格等结构信息。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">⚡</div>
+                <h3 class="feature-title">高效处理性能</h3>
+                <p class="feature-description">
+                    优化的算法设计，支持大文档的快速处理，
+                    批处理语义向量计算，流式处理减少内存占用。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🎛️</div>
+                <h3 class="feature-title">灵活参数配置</h3>
+                <p class="feature-description">
+                    丰富的参数配置选项，适应不同应用场景需求，
+                    支持切片大小、语义阈值、重叠比例等多维度调优。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">📊</div>
+                <h3 class="feature-title">质量评估体系</h3>
+                <p class="feature-description">
+                    提供语义连贯性、长度分布、Token统计等多维度质量评估，
+                    完整的切片质量统计信息和优化建议。
+                </p>
+            </div>
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🔗</div>
+                <h3 class="feature-title">API优先设计</h3>
+                <p class="feature-description">
+                    完整的RESTful API接口和Web界面，易于集成到现有系统，
+                    支持文件上传和文本直接处理两种方式。
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 技术架构 -->
+    <section id="architecture" class="architecture">
+        <div class="architecture-container">
+            <h2 class="section-title">技术架构</h2>
+            <p class="section-subtitle">
+                模块化设计，每个组件专注于特定功能，协同工作确保最佳效果
+            </p>
+            <div class="architecture-diagram">
+                <div class="architecture-flow">
+                    <div class="arch-step">
+                        <h4>📄 文档解析器</h4>
+                        <p>DocumentParser</p>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-step">
+                        <h4>🧠 语义分析器</h4>
+                        <p>SemanticAnalyzer</p>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-step">
+                        <h4>✂️ 智能切片器</h4>
+                        <p>SemanticChunker</p>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-step">
+                        <h4>🔧 切片优化器</h4>
+                        <p>ChunkOptimizer</p>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-step">
+                        <h4>📈 质量评估器</h4>
+                        <p>QualityEvaluator</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 使用场景 -->
+    <section id="use-cases" class="use-cases">
+        <h2 class="section-title">应用场景</h2>
+        <p class="section-subtitle">
+            广泛适用于各种文档处理和AI应用场景
+        </p>
+        <div class="use-cases-grid">
+            <div class="use-case-card fade-in">
+                <div class="use-case-icon">🔍</div>
+                <h3 class="use-case-title">RAG检索增强</h3>
+                <p class="use-case-description">
+                    为RAG应用提供高质量的文档切片，保持语义完整性，提升检索效果。
+                </p>
+                <ul class="use-case-benefits">
+                    <li>语义边界智能识别</li>
+                    <li>保持上下文连续性</li>
+                    <li>优化检索精度</li>
+                </ul>
+            </div>
+            <div class="use-case-card fade-in">
+                <div class="use-case-icon">💬</div>
+                <h3 class="use-case-title">问答系统</h3>
+                <p class="use-case-description">
+                    构建智能问答系统，确保答案的语义完整性和准确性。
+                </p>
+                <ul class="use-case-benefits">
+                    <li>精准答案定位</li>
+                    <li>上下文理解增强</li>
+                    <li>答案质量提升</li>
+                </ul>
+            </div>
+            <div class="use-case-card fade-in">
+                <div class="use-case-icon">📝</div>
+                <h3 class="use-case-title">文档总结</h3>
+                <p class="use-case-description">
+                    智能文档摘要生成，保持重要信息的语义完整性。
+                </p>
+                <ul class="use-case-benefits">
+                    <li>关键信息提取</li>
+                    <li>语义结构保持</li>
+                    <li>摘要质量优化</li>
+                </ul>
+            </div>
+            <div class="use-case-card fade-in">
+                <div class="use-case-icon">🤖</div>
+                <h3 class="use-case-title">AI训练数据</h3>
+                <p class="use-case-description">
+                    为AI模型训练提供高质量的文本数据，确保训练效果。
+                </p>
+                <ul class="use-case-benefits">
+                    <li>数据质量保证</li>
+                    <li>语义一致性</li>
+                    <li>训练效果提升</li>
+                </ul>
+            </div>
+            <div class="use-case-card fade-in">
+                <div class="use-case-icon">🔄</div>
+                <h3 class="use-case-title">知识图谱构建</h3>
+                <p class="use-case-description">
+                    智能提取实体关系，构建高质量的知识图谱。
+                </p>
+                <ul class="use-case-benefits">
+                    <li>实体关系保持</li>
+                    <li>语义关联性</li>
+                    <li>图谱质量优化</li>
+                </ul>
+            </div>
+            <div class="use-case-card fade-in">
+                <div class="use-case-icon">📊</div>
+                <h3 class="use-case-title">内容分析</h3>
+                <p class="use-case-description">
+                    深度文本分析，挖掘文档中的潜在价值和洞察。
+                </p>
+                <ul class="use-case-benefits">
+                    <li>主题识别</li>
+                    <li>情感分析</li>
+                    <li>趋势发现</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 行动召唤 -->
+    <section class="cta-section">
+        <div class="cta-content">
+            <h2 class="cta-title">开始您的智能文档处理之旅</h2>
+            <p class="cta-subtitle">
+                体验基于语义理解的智能文档切片，让文档处理变得更加智能高效
+            </p>
+            <a href="/chunker" class="btn-white">
+                🚀 立即开始使用
+            </a>
+            <a href="/docs" class="btn-white">
+                📚 查看API文档
+            </a>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>🔥 AntSK FileChunk</h3>
+                <p style="color: var(--text-light); margin-top: 0.5rem;">
+                    基于深度语义理解的智能文档切片工具，
+                    专为RAG应用优化。
+                </p>
+            </div>
+            <div class="footer-section">
+                <h3>核心功能</h3>
+                <ul class="footer-links">
+                    <li><a href="#features">智能语义切片</a></li>
+                    <li><a href="#features">多格式文档解析</a></li>
+                    <li><a href="#features">质量评估体系</a></li>
+                    <li><a href="#features">API接口</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>产品资源</h3>
+                <ul class="footer-links">
+                    <li><a href="/docs" target="_blank">API文档</a></li>
+                    <li><a href="https://github.com/xuzeyu91/AntSK-FileChunk" target="_blank">GitHub仓库</a></li>
+                    <li><a href="https://antsk.cn/" target="_blank">AntSK产品</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>技术支持</h3>
+                <ul class="footer-links">
+                    <li><a href="mailto:antskpro@qq.com">技术支持</a></li>
+                    <li><a href="https://github.com/xuzeyu91/AntSK-FileChunk/issues" target="_blank">问题报告</a></li>
+                    <li><a href="https://github.com/xuzeyu91/AntSK-FileChunk/discussions" target="_blank">社区讨论</a></li>
+                    <li><a href="#privacy">隐私政策</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 AntSK Team. 保留所有权利. | 基于语义理解的智能文档切片服务</p>
+        </div>
+    </footer>
+
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    const navbarHeight = document.querySelector('.navbar').offsetHeight;
+                    const targetPosition = target.offsetTop - navbarHeight - 20;
+                    
+                    window.scrollTo({
+                        top: targetPosition,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+
+        // 滚动动画
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('fade-in');
+                }
+            });
+        }, observerOptions);
+
+        // 观察所有需要动画的元素
+        document.querySelectorAll('.feature-card, .use-case-card').forEach(el => {
+            observer.observe(el);
+        });
+
+        // 导航栏滚动效果
+        window.addEventListener('scroll', function() {
+            const navbar = document.querySelector('.navbar');
+            if (window.scrollY > 100) {
+                navbar.style.background = 'rgba(255, 255, 255, 0.98)';
+                navbar.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
+            } else {
+                navbar.style.background = 'rgba(255, 255, 255, 0.95)';
+                navbar.style.boxShadow = 'none';
+            }
+        });
+
+        // 滚动到顶部功能
+        function scrollToTop(event) {
+            event.preventDefault();
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // 页面加载完成提示
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('AntSK 语义文本切片服务主页已加载完成');
+        });
+    </script>
+</body>
+</html>
