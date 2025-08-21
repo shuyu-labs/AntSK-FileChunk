@@ -43,6 +43,6 @@ AntSK 语义文本切片服务
 __version__ = "1.0.0"
 __author__ = "AntSK Team"
 
-from .core.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk, EnhancedSemanticChunker, EmbeddingCache
+from .enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk, EnhancedSemanticChunker, EmbeddingCache
 
 __all__ = ["SemanticChunker", "EnhancedSemanticChunker", "ChunkConfig", "TextChunk", "EmbeddingCache"]

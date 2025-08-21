@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 import numpy as np
 
-from src.antsk_filechunk.core.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk
+from src.antsk_filechunk.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)

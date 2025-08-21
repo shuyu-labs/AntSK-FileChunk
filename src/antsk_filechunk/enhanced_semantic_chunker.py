@@ -26,10 +26,10 @@ import nltk
 import jieba
 from tqdm import tqdm
 
-from ..parsers.document_parser import DocumentParser
-from ..analyzers.semantic_analyzer import SemanticAnalyzer
-from ..optimizers.chunk_optimizer import ChunkOptimizer
-from ..evaluators.quality_evaluator import QualityEvaluator
+from .document_parser import DocumentParser
+from .semantic_analyzer import SemanticAnalyzer
+from .chunk_optimizer import ChunkOptimizer
+from .quality_evaluator import QualityEvaluator
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

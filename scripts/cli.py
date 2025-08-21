@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 import sys
 
-from src.antsk_filechunk.core.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk
+from src.antsk_filechunk.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk
 
 
 def setup_logging(verbose: bool = False):
