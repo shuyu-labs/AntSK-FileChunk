@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AntSK 文件切片服务 - 测试页面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #eee;
+            margin-bottom: 2rem;
+        }
+
+        .tab {
+            padding: 1rem 2rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1.1rem;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #444;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 150px;
+        }
+
+        .file-upload {
+            border: 2px dashed #ddd;
+            border-radius: 5px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .file-upload.dragover {
+            border-color: #667eea;
+            background-color: #e8eaff;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .config-section {
+            background: #f8f9ff;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            margin-top: 2rem;
+            padding: 2rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .chunk {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .chunk-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .chunk-content {
+            background: #f9f9f9;
+            padding: 1rem;
+            border-radius: 3px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9rem;
+        }
+
+        .chunk-stats {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 1rem;
+            border-radius: 5px;
+            margin-top: 1rem;
+        }
+
+        .success {
+            background: #efe;
+            border: 1px solid #cfc;
+            color: #363;
+            padding: 1rem;
+            border-radius: 5px;
+            margin-top: 1rem;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔖 AntSK 文件切片服务</h1>
+            <p>基于语义理解的智能文本切片工具</p>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('file')">文件上传</button>
+                <button class="tab" onclick="switchTab('text')">文本输入</button>
+                <button class="tab" onclick="switchTab('api')">API文档</button>
+            </div>
+
+            <!-- 文件上传标签页 -->
+            <div id="file-tab" class="tab-content active">
+                <form id="file-form">
+                    <div class="form-group">
+                        <label>上传文件 (支持 PDF, Word, TXT 格式)</label>
+                        <div class="file-upload" id="file-drop" onclick="document.getElementById('file-input').click()">
+                            <input type="file" id="file-input" accept=".pdf,.docx,.doc,.txt" style="display: none">
+                            <div id="file-drop-text">
+                                📁 点击选择文件或拖拽文件到此处<br>
+                                <small>支持 PDF、Word、TXT 格式，最大 10MB</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-section">
+                        <h3>切片配置</h3>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="min-chunk-size">最小切片大小</label>
+                                <input type="number" id="min-chunk-size" class="form-control" value="200" min="50" max="1000">
+                            </div>
+                            <div class="form-group">
+                                <label for="max-chunk-size">最大切片大小</label>
+                                <input type="number" id="max-chunk-size" class="form-control" value="1500" min="500" max="5000">
+                            </div>
+                            <div class="form-group">
+                                <label for="target-chunk-size">目标切片大小</label>
+                                <input type="number" id="target-chunk-size" class="form-control" value="800" min="200" max="2000">
+                            </div>
+                            <div class="form-group">
+                                <label for="overlap-ratio">重叠比例</label>
+                                <input type="number" id="overlap-ratio" class="form-control" value="0.1" min="0" max="0.5" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label for="semantic-threshold">语义阈值</label>
+                                <input type="number" id="semantic-threshold" class="form-control" value="0.7" min="0" max="1" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label for="language">语言</label>
+                                <select id="language" class="form-control">
+                                    <option value="zh">中文</option>
+                                    <option value="en">English</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="preserve-structure" checked>
+                                    <label for="preserve-structure">保持文档结构</label>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="handle-special" checked>
+                                    <label for="handle-special">处理特殊内容</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn" id="file-submit-btn">
+                        🚀 开始处理文件
+                    </button>
+                </form>
+            </div>
+
+            <!-- 文本输入标签页 -->
+            <div id="text-tab" class="tab-content">
+                <form id="text-form">
+                    <div class="form-group">
+                        <label for="text-input">输入要处理的文本</label>
+                        <textarea id="text-input" class="form-control" rows="10" 
+                                  placeholder="请输入要进行语义切片的文本内容..."></textarea>
+                    </div>
+
+                    <div class="config-section">
+                        <h3>切片配置</h3>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="text-min-chunk-size">最小切片大小</label>
+                                <input type="number" id="text-min-chunk-size" class="form-control" value="200" min="50" max="1000">
+                            </div>
+                            <div class="form-group">
+                                <label for="text-max-chunk-size">最大切片大小</label>
+                                <input type="number" id="text-max-chunk-size" class="form-control" value="1500" min="500" max="5000">
+                            </div>
+                            <div class="form-group">
+                                <label for="text-target-chunk-size">目标切片大小</label>
+                                <input type="number" id="text-target-chunk-size" class="form-control" value="800" min="200" max="2000">
+                            </div>
+                            <div class="form-group">
+                                <label for="text-language">语言</label>
+                                <select id="text-language" class="form-control">
+                                    <option value="zh">中文</option>
+                                    <option value="en">English</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn" id="text-submit-btn">
+                        🚀 开始处理文本
+                    </button>
+                </form>
+            </div>
+
+            <!-- API文档标签页 -->
+            <div id="api-tab" class="tab-content">
+                <h3>API 接口文档</h3>
+                <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
+                    <h4>1. 处理文件接口</h4>
+                    <pre><code>POST /api/process-file
+Content-Type: multipart/form-data
+
+参数:
+- file: 上传的文件 (必需)
+- config: 配置JSON字符串 (可选)
+
+响应: ProcessResponse</code></pre>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
+                    <h4>2. 处理文本接口</h4>
+                    <pre><code>POST /api/process-text
+Content-Type: application/x-www-form-urlencoded
+
+参数:
+- text: 文本内容 (必需)
+- config: 配置JSON字符串 (可选)
+
+响应: ProcessResponse</code></pre>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
+                    <h4>3. 获取默认配置</h4>
+                    <pre><code>GET /api/config/default
+
+响应: ChunkConfigRequest</code></pre>
+                </div>
+
+                <p><strong>Swagger文档:</strong> <a href="/docs" target="_blank">/docs</a></p>
+                <p><strong>ReDoc文档:</strong> <a href="/redoc" target="_blank">/redoc</a></p>
+            </div>
+        </div>
+
+        <!-- 结果显示区域 -->
+        <div id="result-section" style="display: none;"></div>
+    </div>
+
+    <script>
+        // 标签页切换
+        function switchTab(tabName) {
+            const tabs = document.querySelectorAll('.tab');
+            const contents = document.querySelectorAll('.tab-content');
+            
+            tabs.forEach(tab => tab.classList.remove('active'));
+            contents.forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        // 文件拖拽处理
+        const fileDropArea = document.getElementById('file-drop');
+        const fileInput = document.getElementById('file-input');
+        const fileDropText = document.getElementById('file-drop-text');
+
+        fileDropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileDropArea.classList.add('dragover');
+        });
+
+        fileDropArea.addEventListener('dragleave', () => {
+            fileDropArea.classList.remove('dragover');
+        });
+
+        fileDropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileDropArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                updateFileDisplay(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                updateFileDisplay(e.target.files[0]);
+            }
+        });
+
+        function updateFileDisplay(file) {
+            fileDropText.innerHTML = `
+                ✅ 已选择文件: ${file.name}<br>
+                <small>大小: ${(file.size / 1024 / 1024).toFixed(2)} MB</small>
+            `;
+        }
+
+        // 文件表单提交
+        document.getElementById('file-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('请选择文件！');
+                return;
+            }
+
+            const config = getFileConfig();
+            await processFile(file, config);
+        });
+
+        // 文本表单提交
+        document.getElementById('text-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const text = document.getElementById('text-input').value.trim();
+            if (!text) {
+                alert('请输入文本内容！');
+                return;
+            }
+
+            const config = getTextConfig();
+            await processText(text, config);
+        });
+
+        // 获取文件配置
+        function getFileConfig() {
+            return {
+                min_chunk_size: parseInt(document.getElementById('min-chunk-size').value),
+                max_chunk_size: parseInt(document.getElementById('max-chunk-size').value),
+                target_chunk_size: parseInt(document.getElementById('target-chunk-size').value),
+                overlap_ratio: parseFloat(document.getElementById('overlap-ratio').value),
+                semantic_threshold: parseFloat(document.getElementById('semantic-threshold').value),
+                language: document.getElementById('language').value,
+                preserve_structure: document.getElementById('preserve-structure').checked,
+                handle_special_content: document.getElementById('handle-special').checked
+            };
+        }
+
+        // 获取文本配置
+        function getTextConfig() {
+            return {
+                min_chunk_size: parseInt(document.getElementById('text-min-chunk-size').value),
+                max_chunk_size: parseInt(document.getElementById('text-max-chunk-size').value),
+                target_chunk_size: parseInt(document.getElementById('text-target-chunk-size').value),
+                language: document.getElementById('text-language').value
+            };
+        }
+
+        // 处理文件
+        async function processFile(file, config) {
+            const submitBtn = document.getElementById('file-submit-btn');
+            const resultSection = document.getElementById('result-section');
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '⏳ 处理中...';
+            
+            showLoading();
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('config', JSON.stringify(config));
+                
+                const response = await fetch('/api/process-file', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult(result);
+                } else {
+                    showError(result.detail || '处理失败');
+                }
+                
+            } catch (error) {
+                showError('网络错误: ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '🚀 开始处理文件';
+            }
+        }
+
+        // 处理文本
+        async function processText(text, config) {
+            const submitBtn = document.getElementById('text-submit-btn');
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '⏳ 处理中...';
+            
+            showLoading();
+            
+            try {
+                const formData = new FormData();
+                formData.append('text', text);
+                formData.append('config', JSON.stringify(config));
+                
+                const response = await fetch('/api/process-text', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult(result);
+                } else {
+                    showError(result.detail || '处理失败');
+                }
+                
+            } catch (error) {
+                showError('网络错误: ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '🚀 开始处理文本';
+            }
+        }
+
+        // 显示加载状态
+        function showLoading() {
+            const resultSection = document.getElementById('result-section');
+            resultSection.style.display = 'block';
+            resultSection.innerHTML = `
+                <div class="card">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>正在进行语义分析和切片处理，请稍候...</p>
+                    </div>
+                </div>
+            `;
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 显示结果
+        function showResult(result) {
+            const resultSection = document.getElementById('result-section');
+            let html = `
+                <div class="card">
+                    <div class="success">
+                        <h3>✅ 处理成功!</h3>
+                        <p>共生成 ${result.total_chunks} 个切片，处理时间: ${result.processing_time.toFixed(2)} 秒</p>
+                    </div>
+                    
+                    <div style="margin-top: 2rem;">
+                        <h3>文件信息</h3>
+                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 5px; margin-bottom: 2rem;">
+                            <p><strong>文件名:</strong> ${result.file_info.filename || '文本输入'}</p>
+                            <p><strong>类型:</strong> ${result.file_info.type}</p>
+                            <p><strong>大小:</strong> ${(result.file_info.size / 1024).toFixed(2)} KB</p>
+                        </div>
+                    </div>
+                    
+                    <h3>切片结果 (${result.chunks.length}个)</h3>
+            `;
+            
+            result.chunks.forEach((chunk, index) => {
+                html += `
+                    <div class="chunk">
+                        <div class="chunk-header">
+                            <strong>切片 ${index + 1}</strong>
+                            <span>类型: ${chunk.chunk_type}</span>
+                        </div>
+                        <div class="chunk-content">${chunk.content}</div>
+                        <div class="chunk-stats">
+                            <span>字符数: ${chunk.end_pos - chunk.start_pos}</span>
+                            <span>Token数: ${chunk.token_count}</span>
+                            <span>语义得分: ${chunk.semantic_score.toFixed(3)}</span>
+                            <span>段落: ${chunk.paragraph_indices.join(', ')}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            resultSection.innerHTML = html;
+        }
+
+        // 显示错误
+        function showError(message) {
+            const resultSection = document.getElementById('result-section');
+            resultSection.style.display = 'block';
+            resultSection.innerHTML = `
+                <div class="card">
+                    <div class="error">
+                        <h3>❌ 处理失败</h3>
+                        <p>${message}</p>
+                    </div>
+                </div>
+            `;
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
