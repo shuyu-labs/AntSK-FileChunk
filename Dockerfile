@@ -61,4 +61,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 8000
 
 # 启动命令
-CMD ["python", "api_server.py"]
+CMD ["python", "start_server.py"]
