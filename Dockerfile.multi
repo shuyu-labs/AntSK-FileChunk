@@ -1,0 +1,82 @@
+# AntSK-FileChunk Docker 镜像 (多阶段构建)
+# 支持不同的 Debian/Ubuntu 版本
+
+# 第一阶段：依赖安装
+FROM python:3.9-slim as base
+
+# 设置环境变量
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 设置工作目录
+WORKDIR /app
+
+# 尝试安装系统依赖 (新版本包名)
+RUN apt-get update && \
+    (apt-get install -y \
+        build-essential \
+        gcc \
+        g++ \
+        wget \
+        curl \
+        git \
+        libgl1 \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
+        libgomp1 \
+        libfontconfig1 \
+        libxss1 \
+    || apt-get install -y \
+        build-essential \
+        gcc \
+        g++ \
+        wget \
+        curl \
+        git \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
+        libgomp1 \
+    || apt-get install -y \
+        build-essential \
+        wget \
+        curl \
+        git) \
+    && rm -rf /var/lib/apt/lists/*
+
+# 第二阶段：Python 依赖
+FROM base as python-deps
+
+# 升级 pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# 复制并安装 Python 依赖
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 第三阶段：应用构建
+FROM python-deps as app
+
+# 复制项目文件
+COPY . .
+
+# 创建必要的目录
+RUN mkdir -p temp static templates config
+
+# 设置权限
+RUN chmod +x start_server.py
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 暴露端口
+EXPOSE 8000
+
+# 启动命令
+CMD ["python", "start_server.py"]

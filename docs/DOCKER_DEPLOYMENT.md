@@ -57,6 +57,21 @@ docker ps
 docker build -t antsk-filechunk:latest .
 ```
 
+### 构建选项
+
+如果遇到系统依赖问题，可以尝试不同的构建选项：
+
+```bash
+# 选项1：使用精简版 Dockerfile（推荐用于快速测试）
+docker build -f Dockerfile.slim -t antsk-filechunk:slim .
+
+# 选项2：使用多阶段构建 Dockerfile（推荐用于生产环境）
+docker build -f Dockerfile.multi -t antsk-filechunk:multi .
+
+# 选项3：标准 Dockerfile
+docker build -t antsk-filechunk:latest .
+```
+
 ### 自定义构建参数
 
 ```bash
@@ -268,7 +283,23 @@ docker-compose up -d --no-deps --build antsk-filechunk
 
 ### 常见问题
 
-#### 1. 容器启动失败
+#### 1. Docker 构建失败 - 包依赖问题
+
+如果遇到类似 `Package 'libgl1-mesa-glx' has no installation candidate` 的错误：
+
+```bash
+# 方法1：使用精简版 Dockerfile
+docker build -f Dockerfile.slim -t antsk-filechunk:slim .
+
+# 方法2：使用多阶段构建
+docker build -f Dockerfile.multi -t antsk-filechunk:multi .
+
+# 方法3：手动修复包名（针对新版本 Debian）
+# 编辑 Dockerfile，将 libgl1-mesa-glx 替换为 libgl1
+# 将 libxrender-dev 替换为 libxrender1
+```
+
+#### 2. 容器启动失败
 
 ```bash
 # 查看启动日志

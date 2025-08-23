@@ -8,11 +8,11 @@
 
 | 文件名 | 用途 | 说明 |
 |--------|------|------|
-| `Dockerfile` | Docker 镜像构建文件 | 定义了容器环境和依赖 |
+| `Dockerfile` | Docker 镜像构建文件 | 标准版本，包含完整系统依赖 |
+| `Dockerfile.slim` | 精简版构建文件 | 最小依赖，适合快速测试 |
+| `Dockerfile.multi` | 多阶段构建文件 | 兼容性最好，适合生产环境 |
 | `.dockerignore` | Docker 构建忽略文件 | 排除不必要的文件，减小镜像大小 |
 | `docker-compose.yml` | Docker Compose 配置 | 定义服务编排和网络配置 |
-| `docker-start.sh` | Linux/Mac 启动脚本 | 自动化 Docker 部署脚本 |
-| `docker-start.bat` | Windows 启动脚本 | Windows 环境下的部署脚本 |
 | `examples/docker_test.py` | 部署测试脚本 | 验证 Docker 部署是否成功 |
 | `docs/DOCKER_DEPLOYMENT.md` | 详细部署文档 | 完整的部署指南和故障排除 |
 
@@ -35,8 +35,14 @@ docker-compose logs -f antsk-filechunk
 ### 方式二：直接使用 Docker
 
 ```bash
-# 构建镜像
+# 标准构建
 docker build -t antsk-filechunk:latest .
+
+# 如果遇到包依赖问题，尝试精简版
+docker build -f Dockerfile.slim -t antsk-filechunk:slim .
+
+# 或者使用多阶段构建（推荐）
+docker build -f Dockerfile.multi -t antsk-filechunk:multi .
 
 # 运行容器
 docker run -d \
@@ -47,28 +53,6 @@ docker run -d \
 ```
 
 ## 🔧 服务管理
-
-### 启动脚本命令
-
-```bash
-# 查看帮助
-./docker-start.sh --help
-
-# 查看服务状态
-./docker-start.sh --status
-
-# 查看日志
-./docker-start.sh --logs
-
-# 重启服务
-./docker-start.sh --restart
-
-# 停止服务
-./docker-start.sh --stop
-
-# 重新构建并启动
-./docker-start.sh --build
-```
 
 ### Docker Compose 命令
 
@@ -145,7 +129,18 @@ python examples/docker_test.py http://your-server:8000
 
 ### 常见问题
 
-1. **端口被占用**
+1. **Docker 构建失败 - 包依赖问题**
+   
+   如果遇到 `Package 'libgl1-mesa-glx' has no installation candidate` 错误：
+   ```bash
+   # 使用精简版 Dockerfile
+   docker build -f Dockerfile.slim -t antsk-filechunk:slim .
+   
+   # 或使用多阶段构建
+   docker build -f Dockerfile.multi -t antsk-filechunk:multi .
+   ```
+
+2. **端口被占用**
    ```bash
    # 检查端口占用
    netstat -tlnp | grep 8000

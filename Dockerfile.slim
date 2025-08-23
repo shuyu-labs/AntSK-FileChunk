@@ -1,4 +1,4 @@
-# AntSK-FileChunk Docker 镜像
+# AntSK-FileChunk Docker 镜像 (精简版)
 # 基于 Python 3.9 官方镜像
 FROM python:3.9-slim
 
@@ -10,22 +10,11 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 安装系统依赖
+# 安装最小系统依赖
 RUN apt-get update && apt-get install -y \
     build-essential \
-    gcc \
-    g++ \
     wget \
     curl \
-    git \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
-    libgomp1 \
-    libfontconfig1 \
-    libxss1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 升级 pip 并安装 Python 依赖
