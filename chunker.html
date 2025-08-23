@@ -351,6 +351,76 @@
             color: var(--text-light);
         }
 
+        /* 配置标签容器 */
+        .config-label-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* 提示问号样式 */
+        .config-tooltip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: help;
+            transition: all 0.3s ease;
+        }
+
+        .config-tooltip:hover {
+            background: var(--accent-color);
+            transform: scale(1.1);
+        }
+
+        /* 提示内容 */
+        .config-tooltip-content {
+            position: absolute;
+            bottom: 130%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            white-space: nowrap;
+            max-width: 300px;
+            white-space: normal;
+            width: max-content;
+            min-width: 200px;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 提示箭头 */
+        .config-tooltip-content::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: rgba(0, 0, 0, 0.9);
+        }
+
+        /* 显示提示 */
+        .config-tooltip:hover .config-tooltip-content {
+            opacity: 1;
+            visibility: visible;
+        }
+
         .switch {
             position: relative;
             display: inline-block;
@@ -841,45 +911,110 @@
             </h3>
             <div class="config-grid">
                 <div class="config-item">
-                    <label class="config-label">目标切片大小</label>
+                    <div class="config-label-container">
+                        <label class="config-label">目标切片大小</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                理想的文本切片字符数目标。系统会尽量将文本切分到接近这个长度，同时保持语义完整性。较大的目标值会产生更长的切片，包含更多上下文信息。
+                            </div>
+                        </div>
+                    </div>
                     <input type="number" id="targetChunkSize" class="config-input" value="800" min="200" max="2000">
                     <div class="config-hint">推荐范围: 600-1200 字符</div>
                 </div>
                 <div class="config-item">
-                    <label class="config-label">最小切片大小</label>
+                    <div class="config-label-container">
+                        <label class="config-label">最小切片大小</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                单个文本切片的最小字符数。低于此长度的切片会被合并到相邻切片中，确保每个切片都有足够的信息量。设置过小可能产生信息不完整的切片。
+                            </div>
+                        </div>
+                    </div>
                     <input type="number" id="minChunkSize" class="config-input" value="200" min="50" max="1000">
                     <div class="config-hint">最小 50 字符</div>
                 </div>
                 <div class="config-item">
-                    <label class="config-label">最大切片大小</label>
+                    <div class="config-label-container">
+                        <label class="config-label">最大切片大小</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                单个文本切片的最大字符数限制。超过此长度的文本段会被强制切分，即使可能破坏语义完整性。防止单个切片过长影响处理效率。
+                            </div>
+                        </div>
+                    </div>
                     <input type="number" id="maxChunkSize" class="config-input" value="1500" min="500" max="5000">
                     <div class="config-hint">最大 5000 字符</div>
                 </div>
                 <div class="config-item">
-                    <label class="config-label">语义相似度阈值</label>
+                    <div class="config-label-container">
+                        <label class="config-label">语义相似度阈值</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                判断相邻文本段是否应该合并的语义相似度门槛。值越高表示要求越严格，只有高度相关的内容才会被合并。较低的值会产生更长但可能主题分散的切片。
+                            </div>
+                        </div>
+                    </div>
                     <input type="number" id="semanticThreshold" class="config-input" value="0.7" min="0" max="1" step="0.1">
                     <div class="config-hint">0.0-1.0，越高越严格</div>
                 </div>
                 <div class="config-item">
-                    <label class="config-label">段落合并阈值</label>
+                    <div class="config-label-container">
+                        <label class="config-label">段落合并阈值</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                决定相邻段落是否应该合并成一个切片的相似度阈值。高阈值保持段落独立性，低阈值允许相关段落合并，创建更有上下文的切片。
+                            </div>
+                        </div>
+                    </div>
                     <input type="number" id="paragraphMergeThreshold" class="config-input" value="0.8" min="0" max="1" step="0.1">
                     <div class="config-hint">用于判断段落是否应合并，0.0-1.0</div>
                 </div>
                 <div class="config-item">
-                    <label class="config-label">重叠比例</label>
+                    <div class="config-label-container">
+                        <label class="config-label">重叠比例</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                相邻切片之间重叠内容的比例。重叠可以保持上下文连续性，提高信息检索的准确性。较高的重叠比例会增加总体数据量但提供更好的语义连接。
+                            </div>
+                        </div>
+                    </div>
                     <input type="number" id="overlapRatio" class="config-input" value="0.1" min="0" max="0.5" step="0.05">
                     <div class="config-hint">切片间重叠比例</div>
                 </div>
                 <div class="config-item">
-                    <label class="config-label">语言设置</label>
+                    <div class="config-label-container">
+                        <label class="config-label">语言设置</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                指定文档的主要语言，影响文本分词、语义分析和句子边界检测。正确的语言设置能显著提高切片质量和语义理解准确性。
+                            </div>
+                        </div>
+                    </div>
                     <select id="language" class="config-input">
                         <option value="zh">中文</option>
                         <option value="en">英文</option>
                     </select>
                     <div class="config-hint">选择文档主要语言</div>
                 </div>
+                <br/>
                 <div class="config-item">
-                    <label class="config-label">保持文档结构</label>
+                    <div class="config-label-container">
+                        <label class="config-label">保持文档结构</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                启用后会识别并保持文档的层级结构（如标题、章节、段落），确保切片边界不会破坏重要的文档组织结构，保持内容的逻辑完整性。
+                            </div>
+                        </div>
+                    </div>
                     <label class="switch">
                         <input type="checkbox" id="preserveStructure" checked>
                         <span class="slider"></span>
@@ -887,7 +1022,15 @@
                     <div class="config-hint">保持章节段落结构</div>
                 </div>
                 <div class="config-item">
-                    <label class="config-label">处理特殊内容</label>
+                    <div class="config-label-container">
+                        <label class="config-label">处理特殊内容</label>
+                        <div class="config-tooltip">
+                            ?
+                            <div class="config-tooltip-content">
+                                启用后会特别处理表格、代码块、公式、列表等特殊内容，确保这些结构化内容的完整性，避免在特殊内容中间进行切分。
+                            </div>
+                        </div>
+                    </div>
                     <label class="switch">
                         <input type="checkbox" id="handleSpecialContent" checked>
                         <span class="slider"></span>
