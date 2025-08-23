@@ -861,6 +861,11 @@
                     <div class="config-hint">0.0-1.0，越高越严格</div>
                 </div>
                 <div class="config-item">
+                    <label class="config-label">段落合并阈值</label>
+                    <input type="number" id="paragraphMergeThreshold" class="config-input" value="0.8" min="0" max="1" step="0.1">
+                    <div class="config-hint">用于判断段落是否应合并，0.0-1.0</div>
+                </div>
+                <div class="config-item">
                     <label class="config-label">重叠比例</label>
                     <input type="number" id="overlapRatio" class="config-input" value="0.1" min="0" max="0.5" step="0.05">
                     <div class="config-hint">切片间重叠比例</div>
@@ -1030,6 +1035,7 @@
                 max_chunk_size: parseInt(document.getElementById('maxChunkSize').value),
                 target_chunk_size: parseInt(document.getElementById('targetChunkSize').value),
                 semantic_threshold: parseFloat(document.getElementById('semanticThreshold').value),
+                paragraph_merge_threshold: parseFloat(document.getElementById('paragraphMergeThreshold').value),
                 overlap_ratio: parseFloat(document.getElementById('overlapRatio').value),
                 language: document.getElementById('language').value,
                 preserve_structure: document.getElementById('preserveStructure').checked,
@@ -1251,6 +1257,10 @@
                     document.getElementById('maxChunkSize').value = config.max_chunk_size;
                     document.getElementById('targetChunkSize').value = config.target_chunk_size;
                     document.getElementById('semanticThreshold').value = config.semantic_threshold;
+                    // 新增：段落合并阈值
+                    if (document.getElementById('paragraphMergeThreshold')) {
+                        document.getElementById('paragraphMergeThreshold').value = config.paragraph_merge_threshold ?? 0.8;
+                    }
                     document.getElementById('overlapRatio').value = config.overlap_ratio;
                     document.getElementById('language').value = config.language;
                     document.getElementById('preserveStructure').checked = config.preserve_structure;
