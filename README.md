@@ -512,7 +512,6 @@ mypy src/
 - **项目主页**：https://github.com/antsk/AntSK-FileChunk
 - **问题反馈**：https://github.com/antsk/AntSK-FileChunk/issues
 - **邮箱**：antskpro@qq.com
-- **QQ群**：[AntSK技术交流群]
 
 ## 🙏 致谢
 
@@ -521,14 +520,6 @@ mypy src/
 - [FastAPI](https://github.com/tiangolo/fastapi) - Web框架
 - [PyMuPDF](https://github.com/pymupdf/PyMuPDF) - PDF处理
 - [python-docx](https://github.com/python-openxml/python-docx) - Word文档处理
-
-## 📈 更新日志
-
-### v1.0.0 (2024-01-15)
-- ✨ 初始版本发布
-- 🧠 基础语义切片功能
-- 🌐 FastAPI服务接口
-- 📚 完整文档和示例
 
 ---
 
