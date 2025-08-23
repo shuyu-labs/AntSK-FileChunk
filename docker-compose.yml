@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: antsk-filechunk
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       # 挂载临时文件目录，用于文件上传处理
       - ./temp:/app/temp
