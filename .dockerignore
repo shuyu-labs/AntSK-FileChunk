@@ -1,4 +1,4 @@
-# Python
+# Python 相关
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,150 +16,87 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
+# 虚拟环境
 venv/
+env/
 ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# 项目特定
-temp/
-logs/
-*.tmp
-*.bak
-*.swp
-*~
-
-# 开发工具
+# IDE 相关
 .vscode/
 .idea/
-*.sublime-*
+*.swp
+*.swo
+*~
 
-# Git
+# 操作系统相关
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git 相关
 .git/
 .gitignore
 
-# Docker
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+temp/
+tmp/
+*.tmp
+
+# 测试相关
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# 文档构建
+docs/_build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 环境配置
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Node.js (如果有前端资源)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 数据文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 备份文件
+*.bak
+*.backup
+
+# Docker 相关
 Dockerfile
 .dockerignore
 docker-compose*.yml
 
-# CI/CD
-.github/
-.gitlab-ci.yml
-.travis.yml
-
-# 测试数据
-test_data/
-examples/data/
-*.test
-
-# 模型缓存（如果有）
-models/
-.transformers_cache/
-.sentence_transformers/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# 配置文件的私有版本
-config/*.local.conf
-config/*.private.conf
-
+# README 和文档（保留在镜像中）
+# README.md
+# docs/

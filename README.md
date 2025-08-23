@@ -344,7 +344,24 @@ config = ChunkConfig(
 
 ## 🐳 Docker部署
 
-### 构建镜像
+### 快速开始
+
+#### 方式一：使用 Docker Compose（推荐）
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/xuzeyu91/AntSK-FileChunk.git
+cd AntSK-FileChunk
+
+# 2. 启动服务
+docker-compose up -d
+
+# 3. 访问服务
+# Web界面: http://localhost:8000
+# API文档: http://localhost:8000/docs
+```
+
+#### 方式二：直接使用 Docker
 
 ```bash
 # 构建镜像
@@ -355,25 +372,59 @@ docker run -d \
   --name antsk-filechunk \
   -p 8000:8000 \
   -v $(pwd)/temp:/app/temp \
+  -v $(pwd)/config:/app/config \
   antsk-filechunk:latest
 ```
 
-### Docker Compose
+### 生产环境部署
 
-```yaml
-version: '3.8'
-services:
-  antsk-filechunk:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./temp:/app/temp
-      - ./config:/app/config
-    environment:
-      - LOG_LEVEL=info
-    restart: unless-stopped
+#### 带 Nginx 反向代理
+
+```bash
+# 启动包含 Nginx 的完整服务
+docker-compose --profile with-nginx up -d
 ```
+
+#### 集群部署
+
+```bash
+# 使用 Docker Swarm
+docker swarm init
+docker stack deploy -c docker-compose.yml antsk-stack
+```
+
+### 配置选项
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `LOG_LEVEL` | `info` | 日志级别 |
+| `HOST` | `0.0.0.0` | 服务监听地址 |
+| `PORT` | `8000` | 服务端口 |
+
+### 卷挂载
+
+```bash
+# 临时文件目录（必需）
+-v $(pwd)/temp:/app/temp
+
+# 配置文件目录（可选）
+-v $(pwd)/config:/app/config
+
+# 静态文件目录（可选）
+-v $(pwd)/static:/app/static
+```
+
+### 健康检查
+
+```bash
+# 查看容器健康状态
+docker inspect --format='{{.State.Health.Status}}' antsk-filechunk
+
+# 手动健康检查
+curl -f http://localhost:8000/health
+```
+
+📖 **详细部署指南**：查看 [Docker 部署文档](docs/DOCKER_DEPLOYMENT.md) 获取完整的部署说明、故障排除和最佳实践。
 
 ## 📊 性能指标
 
