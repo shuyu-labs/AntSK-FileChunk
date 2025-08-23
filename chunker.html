@@ -659,6 +659,70 @@
         .fade-in {
             animation: fadeInUp 0.6s ease forwards;
         }
+
+        /* === 轻量缩小整体布局与字体（约 8-12%） === */
+        html { font-size: 15px; } /* 由默认16px调整为15px，rem整体略缩 */
+        body { font-size: 0.95rem; }
+
+        /* 顶部导航与标题 */
+        .navbar { padding: 0.75rem 0; }
+        .nav-container { padding: 0 1.5rem; }
+        .logo { font-size: 1.35rem; }
+        .nav-links { gap: 1.5rem; }
+        .main-container { padding: 5rem 1.5rem 1.5rem; }
+        .page-title { font-size: 2.6rem; }
+        .page-subtitle { font-size: 1.05rem; }
+
+        /* 标签页导航 */
+        .tab-button { padding: 1.25rem 1.5rem; font-size: 1rem; }
+
+        /* 上传区域与文件信息 */
+        .upload-area { padding: 2.5rem 1.5rem; border-radius: 12px; }
+        .upload-icon { font-size: 2.6rem; }
+        .selected-file { padding: 0.85rem; border-radius: 8px; }
+        .file-icon { font-size: 1.3rem; }
+        .remove-file { font-size: 1.05rem; }
+
+        /* 文本输入区域 */
+        .text-input { min-height: 260px; padding: 1.25rem; font-size: 0.95rem; }
+        .text-counter { font-size: 0.85rem; }
+
+        /* 配置面板 */
+        .config-panel { padding: 1.5rem; border-radius: 12px; }
+        .config-title { font-size: 1.2rem; }
+        .config-input { padding: 0.65rem 0.9rem; font-size: 0.95rem; }
+        .config-hint { font-size: 0.8rem; }
+
+        /* 开关尺寸微调 */
+        .switch { width: 46px; height: 24px; }
+        .slider:before { height: 18px; width: 18px; left: 3px; bottom: 3px; }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        /* 处理按钮 */
+        .process-button { padding: 0.9rem 2.2rem; font-size: 1rem; border-radius: 26px; }
+
+        /* 加载与提示 */
+        .spinner { width: 34px; height: 34px; border-width: 3px; }
+        .error-message, .success-message { padding: 0.8rem 1.2rem; border-radius: 8px; }
+
+        /* 结果展示 */
+        .results-header { padding: 1.5rem; }
+        .results-title { font-size: 1.35rem; }
+        .stat-value { font-size: 1.75rem; }
+        .chunk-card { padding: 1.5rem; border-radius: 12px; }
+        .chunk-title { font-size: 1rem; }
+        .chunk-content { font-size: 0.85rem; padding: 1.2rem; max-height: 260px; }
+        .score-bar { width: 90px; height: 5px; }
+
+        /* 移动端保持协调的同时继续小幅缩小 */
+        @media (max-width: 768px) {
+            .main-container { padding: 5rem 1rem 1.25rem; }
+            .page-title { font-size: 2.2rem; }
+            .tab-button { padding: 1rem 1.25rem; }
+            .upload-area { padding: 2rem 1.25rem; }
+            .config-panel { padding: 1.25rem; }
+            .chunk-content { max-height: 220px; }
+        }
     </style>
 </head>
 <body>
