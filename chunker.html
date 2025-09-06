@@ -628,6 +628,64 @@
             overflow-y: auto;
         }
 
+        /* 表格内容样式 */
+        .chunk-content.table-content {
+            font-family: inherit;
+            white-space: pre-wrap; /* 保持换行符显示 */
+        }
+
+        /* 表格内的文本保持正常换行 */
+        .chunk-content.table-content table {
+            white-space: normal;
+        }
+
+        .chunk-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .chunk-content table th,
+        .chunk-content table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        .chunk-content table th {
+            background: var(--secondary-color);
+            font-weight: 600;
+            color: var(--text-color);
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        .chunk-content table tr:hover {
+            background: rgba(127, 127, 255, 0.05);
+        }
+
+        .chunk-content table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* 表格标识 */
+        .table-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(127, 127, 255, 0.1);
+            color: var(--primary-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+
         .semantic-score {
             display: flex;
             align-items: center;
@@ -1307,6 +1365,498 @@
             document.getElementById('successMessage').classList.remove('show');
         }
 
+        // Markdown表格转HTML表格
+        function markdownTableToHtml(content) {
+            // 处理表格内容标记格式 [表格内容] ...
+            if (content.includes('[表格内容]')) {
+                return parseTableContentFormat(content);
+            }
+            
+            // 处理标准markdown表格格式
+            const tableRegex = /\|(.+)\|\s*\n\|[\s\-\|:]+\|\s*\n((?:\|.+\|\s*\n?)*)/g;
+            
+            // 首先转义HTML，保持换行符
+            let processedContent = escapeHtml(content);
+            
+            // 然后将markdown表格转换为HTML表格
+            processedContent = processedContent.replace(tableRegex, (match, header, rows) => {
+                // 解析表头（需要反转义以正确处理）
+                const headerCells = unescapeHtml(header).split('|').map(cell => cell.trim()).filter(cell => cell);
+                
+                // 解析数据行（需要反转义以正确处理）
+                const dataRows = unescapeHtml(rows).trim().split('\n').map(row => {
+                    return row.split('|').map(cell => cell.trim()).filter(cell => cell);
+                }).filter(row => row.length > 0);
+                
+                // 生成HTML表格
+                let html = '<table>';
+                
+                // 表头
+                if (headerCells.length > 0) {
+                    html += '<thead><tr>';
+                    headerCells.forEach(cell => {
+                        html += `<th>${escapeHtml(cell)}</th>`;
+                    });
+                    html += '</tr></thead>';
+                }
+                
+                // 表体
+                if (dataRows.length > 0) {
+                    html += '<tbody>';
+                    dataRows.forEach(row => {
+                        html += '<tr>';
+                        row.forEach((cell, index) => {
+                            html += `<td>${escapeHtml(cell)}</td>`;
+                        });
+                        // 如果行的列数少于表头，补充空列
+                        for (let i = row.length; i < headerCells.length; i++) {
+                            html += '<td></td>';
+                        }
+                        html += '</tr>';
+                    });
+                    html += '</tbody>';
+                }
+                
+                html += '</table>';
+                return html;
+            });
+            
+            return processedContent;
+        }
+
+        // 解析 [表格内容] 格式的表格
+        function parseTableContentFormat(content) {
+            // 移除 [表格内容] 标记，保留换行符
+            let tableContent = content.replace(/\[表格内容\]\s*/, '').trim();
+            
+            // 先检查是否是标准markdown表格格式（包含换行的）
+            if (tableContent.includes('|') && tableContent.includes('---')) {
+                // 尝试解析标准markdown表格
+                const lines = tableContent.split('\n').map(line => line.trim()).filter(line => line);
+                if (lines.length >= 3) {
+                    // 检查是否有合法的markdown表格结构
+                    const hasHeaderRow = lines[0].includes('|');
+                    const hasSeparatorRow = lines[1] && lines[1].includes('---');
+                    const hasDataRows = lines.length > 2 && lines[2].includes('|');
+                    
+                    if (hasHeaderRow && hasSeparatorRow && hasDataRows) {
+                        return parseStandardMarkdownTable(tableContent);
+                    }
+                }
+            }
+            
+            // 格式1: 检查是否是编号列表格式（如 "1 项目A 描述A 2 项目B 描述B"）
+            if (tableContent.match(/\d+\s+\S+.*?\d+\s+\S+/)) {
+                return parseNumberedListTable(tableContent);
+            }
+            
+            // 格式2: 键值对格式 "key: value | key: value"
+            if (tableContent.includes(':') && tableContent.includes('|')) {
+                return parseKeyValueTable(tableContent);
+            }
+            
+            // 格式3: 标准markdown表格（可能被压缩在一行）
+            if (tableContent.includes('---')) {
+                return parseCompressedMarkdownTable(tableContent);
+            }
+            
+            // 格式4: 简单的管道分隔格式
+            if (tableContent.includes('|')) {
+                return parseSimplePipeTable(tableContent);
+            }
+            
+            // 如果无法解析，返回原始内容
+            return escapeHtml(content);
+        }
+        
+        // 解析标准markdown表格
+        function parseStandardMarkdownTable(content) {
+            try {
+                const lines = content.split('\n').map(line => line.trim()).filter(line => line);
+                const tableData = [];
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    
+                    // 跳过分隔行
+                    if (line.includes('---')) {
+                        continue;
+                    }
+                    
+                    // 解析表格行
+                    if (line.includes('|')) {
+                        const cells = line.split('|')
+                            .map(cell => cell.trim())
+                            .filter((cell, index, array) => {
+                                // 移除首尾的空单元格
+                                return !(index === 0 && cell === '') && !(index === array.length - 1 && cell === '');
+                            });
+                        
+                        if (cells.length > 0) {
+                            // 确保有至少3列
+                            while (cells.length < 3) {
+                                cells.push('');
+                            }
+                            tableData.push(cells.slice(0, 3)); // 只取前3列
+                        }
+                    }
+                }
+                
+                if (tableData.length >= 1) {
+                    let html = '<table>';
+                    
+                    // 表头
+                    if (tableData.length >= 1) {
+                        html += '<thead><tr>';
+                        tableData[0].forEach(cell => {
+                            html += `<th>${escapeHtml(cell)}</th>`;
+                        });
+                        html += '</tr></thead>';
+                    }
+                    
+                    // 数据行
+                    if (tableData.length > 1) {
+                        html += '<tbody>';
+                        for (let i = 1; i < tableData.length; i++) {
+                            html += '<tr>';
+                            tableData[i].forEach(cell => {
+                                html += `<td>${escapeHtml(cell)}</td>`;
+                            });
+                            html += '</tr>';
+                        }
+                        html += '</tbody>';
+                    }
+                    
+                    html += '</table>';
+                    return html;
+                }
+                
+                return escapeHtml(content);
+            } catch (e) {
+                console.error('解析标准markdown表格失败:', e);
+                return escapeHtml(content);
+            }
+        }
+
+        // 解析编号列表格式的表格
+        function parseNumberedListTable(content) {
+            try {
+                // 更精确的正则表达式，匹配编号和后续内容
+                const numberPattern = /(\d+)\s+([^\d]+?)(?=\s*\d+\s+|$)/g;
+                const matches = [];
+                let match;
+                
+                // 重置正则表达式的lastIndex
+                numberPattern.lastIndex = 0;
+                
+                while ((match = numberPattern.exec(content)) !== null) {
+                    const number = match[1];
+                    let text = match[2].trim();
+                    
+                    // 清理文本中的管道符和多余空格
+                    text = text.replace(/\|\s*$/, '').replace(/^\|\s*/, '').trim();
+                    text = text.replace(/\s+/g, ' '); // 合并多个空格
+                    
+                    if (text) {
+                        matches.push([number, text]);
+                    }
+                }
+                
+                // 如果没有匹配到编号格式，尝试按管道符分割
+                if (matches.length === 0) {
+                    const parts = content.split('|').map(part => part.trim()).filter(part => part);
+                    if (parts.length >= 3) {
+                        // 按3个一组处理
+                        for (let i = 0; i < parts.length; i += 3) {
+                            const group = parts.slice(i, i + 3);
+                            if (group.length >= 2) {
+                                matches.push([group[0] || (i/3 + 1).toString(), group[1] || '', group[2] || '']);
+                            }
+                        }
+                    }
+                }
+                
+                if (matches.length > 0) {
+                    const tableData = [];
+                    
+                    matches.forEach(([number, text]) => {
+                        let question = '';
+                        let example = '';
+                        
+                        // 如果已经是三列数据
+                        if (Array.isArray(text)) {
+                            question = text[0] || '';
+                            example = text[1] || '';
+                        } else {
+                            // 尝试分析文本结构
+                            const questionMarkIndex = text.indexOf('?');
+                            if (questionMarkIndex > 0) {
+                                question = text.substring(0, questionMarkIndex + 1).trim();
+                                let remaining = text.substring(questionMarkIndex + 1).trim();
+                                
+                                // 查找"示例:"后的内容
+                                const exampleMatch = remaining.match(/示例[：:]\s*(.+)/);
+                                if (exampleMatch) {
+                                    example = exampleMatch[1].trim();
+                                } else {
+                                    example = remaining;
+                                }
+                            } else {
+                                // 没有问号，尝试按空格或其他分隔符分割
+                                const parts = text.split(/[\s]{2,}|[，。；]/)
+                                    .map(p => p.trim())
+                                    .filter(p => p);
+                                
+                                if (parts.length >= 2) {
+                                    question = parts[0];
+                                    example = parts.slice(1).join(' ');
+                                } else {
+                                    question = text;
+                                    example = '';
+                                }
+                            }
+                        }
+                        
+                        // 清理内容
+                        question = question.replace(/^[\s|]+|[\s|]+$/g, '');
+                        example = example.replace(/^[\s|]+|[\s|]+$/g, '');
+                        
+                        tableData.push([number, question, example]);
+                    });
+                    
+                    if (tableData.length > 0) {
+                        let html = '<table>';
+                        
+                        // 生成表头
+                        html += '<thead><tr>';
+                        html += '<th>编号</th>';
+                        html += '<th>检查项</th>';
+                        html += '<th>描述</th>';
+                        html += '</tr></thead>';
+                        
+                        // 生成数据行
+                        html += '<tbody>';
+                        tableData.forEach(row => {
+                            html += '<tr>';
+                            html += `<td>${escapeHtml(row[0] || '')}</td>`;
+                            html += `<td>${escapeHtml(row[1] || '')}</td>`;
+                            html += `<td>${escapeHtml(row[2] || '')}</td>`;
+                            html += '</tr>';
+                        });
+                        html += '</tbody></table>';
+                        
+                        return html;
+                    }
+                }
+                
+                return escapeHtml(content);
+            } catch (e) {
+                console.error('解析编号列表表格失败:', e);
+                return escapeHtml(content);
+            }
+        }
+
+        // 解析键值对表格
+        function parseKeyValueTable(content) {
+            try {
+                // 清理内容，移除多余的管道符
+                let cleanContent = content.replace(/\|\s*$/, '').replace(/^\s*\|/, '');
+                const pairs = cleanContent.split('|').map(pair => pair.trim()).filter(pair => pair);
+                
+                let html = '<table>';
+                html += '<thead><tr><th>字段</th><th>值</th></tr></thead>';
+                html += '<tbody>';
+                
+                pairs.forEach(pair => {
+                    const colonIndex = pair.indexOf(':');
+                    if (colonIndex > 0) {
+                        const key = pair.substring(0, colonIndex).trim();
+                        const value = pair.substring(colonIndex + 1).trim();
+                        
+                        // 进一步清理值中的管道符
+                        const cleanValue = value.replace(/\|\s*$/, '').trim();
+                        
+                        html += `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(cleanValue)}</td></tr>`;
+                    } else if (pair.trim()) {
+                        // 没有冒号的内容，作为单独的信息行
+                        html += `<tr><td colspan="2">${escapeHtml(pair)}</td></tr>`;
+                    }
+                });
+                
+                html += '</tbody></table>';
+                return html;
+            } catch (e) {
+                console.error('解析键值对表格失败:', e);
+                return escapeHtml(content);
+            }
+        }
+
+        // 解析压缩的markdown表格
+        function parseCompressedMarkdownTable(content) {
+            try {
+                // 尝试重建表格结构
+                const parts = content.split(/\s+/);
+                const separatorIndex = parts.findIndex(part => part.includes('---'));
+                
+                if (separatorIndex > 0) {
+                    const headerParts = parts.slice(0, separatorIndex);
+                    const dataParts = parts.slice(separatorIndex + 1);
+                    
+                    // 估算列数（基于分隔符）
+                    const separatorPart = parts[separatorIndex];
+                    const colCount = (separatorPart.match(/---/g) || []).length;
+                    
+                    if (colCount > 0) {
+                        let html = '<table>';
+                        
+                        // 构建表头
+                        html += '<thead><tr>';
+                        for (let i = 0; i < Math.min(colCount, headerParts.length); i++) {
+                            html += `<th>${escapeHtml(headerParts[i])}</th>`;
+                        }
+                        html += '</tr></thead>';
+                        
+                        // 构建数据行
+                        html += '<tbody>';
+                        for (let i = 0; i < dataParts.length; i += colCount) {
+                            html += '<tr>';
+                            for (let j = 0; j < colCount; j++) {
+                                const cellData = dataParts[i + j] || '';
+                                html += `<td>${escapeHtml(cellData)}</td>`;
+                            }
+                            html += '</tr>';
+                        }
+                        html += '</tbody></table>';
+                        
+                        return html;
+                    }
+                }
+                
+                return escapeHtml(content);
+            } catch (e) {
+                return escapeHtml(content);
+            }
+        }
+
+        // 解析简单的管道分隔表格
+        function parseSimplePipeTable(content) {
+            try {
+                const parts = content.split('|').map(part => part.trim()).filter(part => part);
+                
+                if (parts.length >= 3) {
+                    const colCount = 3; // 固定3列
+                    const tableData = [];
+                    
+                    // 检查第一部分是否包含表头关键词
+                    const hasHeader = parts[0] && /编号|检查项|描述|项目|内容|序号/.test(parts[0]);
+                    
+                    if (hasHeader) {
+                        // 第一部分是表头描述，需要解析
+                        const headerParts = parts[0].split(/\s+/).filter(p => p.trim());
+                        if (headerParts.length >= 2) {
+                            // 使用解析出的表头
+                            const headers = headerParts.slice(0, 3);
+                            while (headers.length < 3) {
+                                headers.push('描述');
+                            }
+                            tableData.push(headers);
+                            
+                            // 处理剩余数据
+                            const remainingParts = parts.slice(1);
+                            for (let i = 0; i < remainingParts.length; i += colCount) {
+                                const row = [];
+                                for (let j = 0; j < colCount; j++) {
+                                    row.push(remainingParts[i + j] || '');
+                                }
+                                tableData.push(row);
+                            }
+                        } else {
+                            // 使用默认表头
+                            tableData.push(['编号', '检查项', '描述']);
+                            
+                            // 处理所有数据
+                            for (let i = 0; i < parts.length; i += colCount) {
+                                const row = [];
+                                for (let j = 0; j < colCount; j++) {
+                                    row.push(parts[i + j] || '');
+                                }
+                                tableData.push(row);
+                            }
+                        }
+                    } else {
+                        // 没有明确表头，使用默认表头
+                        tableData.push(['编号', '检查项', '描述']);
+                        
+                        // 处理所有数据
+                        for (let i = 0; i < parts.length; i += colCount) {
+                            const row = [];
+                            for (let j = 0; j < colCount; j++) {
+                                row.push(parts[i + j] || '');
+                            }
+                            if (row.some(cell => cell.trim())) { // 至少有一个非空单元格
+                                tableData.push(row);
+                            }
+                        }
+                    }
+                    
+                    // 生成HTML表格
+                    if (tableData.length >= 2) {
+                        let html = '<table>';
+                        
+                        // 表头
+                        html += '<thead><tr>';
+                        tableData[0].forEach(header => {
+                            html += `<th>${escapeHtml(header)}</th>`;
+                        });
+                        html += '</tr></thead>';
+                        
+                        // 数据行
+                        html += '<tbody>';
+                        for (let i = 1; i < tableData.length; i++) {
+                            html += '<tr>';
+                            tableData[i].forEach(cell => {
+                                html += `<td>${escapeHtml(cell)}</td>`;
+                            });
+                            html += '</tr>';
+                        }
+                        html += '</tbody></table>';
+                        
+                        return html;
+                    }
+                }
+                
+                return escapeHtml(content);
+            } catch (e) {
+                console.error('解析简单管道表格失败:', e);
+                return escapeHtml(content);
+            }
+        }
+
+        // HTML转义函数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // HTML反转义函数
+        function unescapeHtml(text) {
+            const div = document.createElement('div');
+            div.innerHTML = text;
+            return div.textContent;
+        }
+
+        // 检查内容是否包含表格
+        function hasTable(content) {
+            // 检查 [表格内容] 标记
+            if (content.includes('[表格内容]')) {
+                return true;
+            }
+            
+            // 检查标准markdown表格格式
+            return /\|(.+)\|\s*\n\|[\s\-\|:]+\|\s*\n/.test(content);
+        }
+
         // 显示结果
         function showResults(result) {
             const resultsDiv = document.getElementById('results');
@@ -1346,6 +1896,24 @@
             result.chunks.forEach((chunk, index) => {
                 const chunkCard = document.createElement('div');
                 chunkCard.className = 'chunk-card fade-in';
+                
+                // 检查是否为表格内容
+                const isTableContent = chunk.chunk_type === 'table_content' || hasTable(chunk.content);
+                const contentClass = isTableContent ? 'chunk-content table-content' : 'chunk-content';
+                
+                // 处理内容显示
+                let displayContent = chunk.content;
+                let tableIndicator = '';
+                
+                if (isTableContent) {
+                    // 如果是表格内容，转换markdown表格为HTML
+                    displayContent = markdownTableToHtml(chunk.content);
+                    tableIndicator = '<div class="table-indicator">📊 表格内容</div>';
+                } else {
+                    // 对于非表格内容，确保HTML转义以正确显示换行符
+                    displayContent = escapeHtml(chunk.content);
+                }
+                
                 chunkCard.innerHTML = `
                     <div class="chunk-header">
                         <div class="chunk-title">切片 ${index + 1}</div>
@@ -1362,7 +1930,8 @@
                             </div>
                         </div>
                     </div>
-                    <div class="chunk-content">${chunk.content}</div>
+                    ${tableIndicator}
+                    <div class="${contentClass}">${displayContent}</div>
                 `;
                 chunksDiv.appendChild(chunkCard);
             });

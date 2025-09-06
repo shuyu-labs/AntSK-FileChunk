@@ -67,16 +67,19 @@ class TextChunk:
 class SemanticChunker:
     """语义文本切片器主类"""
     
-    def __init__(self, config: ChunkConfig = None, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, config: ChunkConfig = None, model_name: str = "all-MiniLM-L6-v2", 
+                 image_base_url: str = "http://localhost:8000"):
         """
         初始化语义切片器
         
         Args:
             config: 切片配置
             model_name: 句子嵌入模型名称
+            image_base_url: 图片访问的基础URL
         """
         self.config = config or ChunkConfig()
         self.model_name = model_name
+        self.image_base_url = image_base_url
         
         # 初始化组件
         self._initialize_components()
@@ -86,8 +89,8 @@ class SemanticChunker:
         try:
             logger.info("正在初始化语义切片器组件...")
             
-            # 文档解析器
-            self.document_parser = UnifiedDocumentParser()
+            # 文档解析器（使用配置的图片URL）
+            self.document_parser = UnifiedDocumentParser(image_base_url=self.image_base_url)
             
             # 语义分析器
             self.semantic_analyzer = SemanticAnalyzer(
@@ -303,6 +306,8 @@ class SemanticChunker:
         Returns:
             是否为表格内容
         """
+        import re
+        
         # 检查是否已经标记为表格内容
         if text.startswith('[表格内容]'):
             return True
@@ -321,7 +326,34 @@ class SemanticChunker:
                 return True
         
         # 检查是否包含表格关键词和结构
-        if any(keyword in text for keyword in ['编号', '检查项', '描述']) and pipe_count >= 2:
+        table_keywords = ['编号', '检查项', '描述', '项目', '内容', '序号', '名称', '说明']
+        if any(keyword in text for keyword in table_keywords) and pipe_count >= 2:
+            return True
+        
+        # 检查编号列表格式（如 "1 问题? 示例: ... 2 问题? 示例: ..."）
+        numbered_pattern = r'\d+\s+[^0-9]+?\?\s*示例[：:]\s*[^0-9]*\d+\s+'
+        if re.search(numbered_pattern, text):
+            return True
+        
+        # 检查是否包含多个编号项（更精确的匹配）
+        # 匹配格式如: "1 内容 2 内容 3 内容"
+        numbered_items = re.findall(r'\b\d+\s+[^\d]+?(?=\s*\d+\s+|$)', text)
+        if len(numbered_items) >= 3:  # 至少3个编号项
+            return True
+        
+        # 检查是否为简单的列表结构（用空格或其他分隔符分隔）
+        # 如: "A B C D E F" 且有一定的规律性
+        if pipe_count >= 2 or '\t' in text:
+            # 检查是否有结构化的内容
+            parts = re.split(r'[|\t]', text)
+            non_empty_parts = [p.strip() for p in parts if p.strip()]
+            if len(non_empty_parts) >= 3:
+                return True
+        
+        # 检查是否包含多个结构化的列表项
+        # 如: "- 项目1 - 项目2 - 项目3"
+        list_items = re.findall(r'[-•·]\s*[^-•·]+', text)
+        if len(list_items) >= 3:
             return True
         
         return False
@@ -427,9 +459,15 @@ class SemanticChunker:
         for i, image in enumerate(document_content.images):
             # 为图片创建描述文本
             image_text = f"图片: {image.get('filename', f'image_{i+1}')}"
+            # 创建markdown格式的图片引用
+            image_url = image.get('url', '')
+            image_filename = image.get('filename', f'image_{i+1}')
+            markdown_image = f"![{image_filename}]({image_url})" if image_url else image_text
+            
             processed_content['elements'].append({
                 'type': 'image',
                 'content': image_text,
+                'markdown_content': markdown_image,  # 添加markdown格式内容
                 'original_data': image,
                 'index': len(processed_content['elements'])
             })
@@ -526,14 +564,32 @@ class SemanticChunker:
             if not table_data:
                 return ""
             
-            # 简单的表格文本化：将所有单元格内容连接
-            text_parts = []
-            for row in table_data:
-                row_text = " ".join([str(cell).strip() for cell in row if str(cell).strip()])
-                if row_text:
-                    text_parts.append(row_text)
+            # 尝试生成更结构化的表格文本
+            # 首先检查是否有markdown格式
+            markdown_lines = table.get('markdown', [])
+            if markdown_lines and isinstance(markdown_lines, list):
+                # 使用markdown格式，保持换行结构
+                return "\n".join(markdown_lines)
             
-            return " | ".join(text_parts) if text_parts else ""
+            # 降级处理：生成简单的编号列表格式
+            text_parts = []
+            for i, row in enumerate(table_data):
+                if i == 0:
+                    # 跳过表头，或者将表头信息整合到描述中
+                    continue
+                
+                # 为每行生成编号格式
+                row_cells = [str(cell).strip() for cell in row if str(cell).strip()]
+                if row_cells:
+                    # 第一列作为编号，其余作为描述
+                    if len(row_cells) >= 2:
+                        number = row_cells[0] if row_cells[0].isdigit() else str(i)
+                        description = " ".join(row_cells[1:])
+                        text_parts.append(f"{number} {description}")
+                    else:
+                        text_parts.append(f"{i} {row_cells[0]}")
+            
+            return " ".join(text_parts) if text_parts else ""
             
         except Exception as e:
             logger.warning(f"表格文本化失败: {e}")
@@ -639,16 +695,51 @@ class SemanticChunker:
             if element_type == 'paragraph':
                 content_parts.append(content)
             elif element_type == 'table':
-                # 对于表格，添加标识和内容
-                content_parts.append(f"[表格内容] {content}")
-            elif element_type == 'image':
-                # 对于图片，添加引用
+                # 对于表格，优先使用markdown格式
                 original_data = element.get('original_data', {})
-                image_url = original_data.get('url', '')
-                if image_url:
-                    content_parts.append(f"[图片] {image_url}")
+                markdown_lines = original_data.get('markdown', [])
+                
+                if markdown_lines and isinstance(markdown_lines, list):
+                    # 使用完整的markdown表格格式
+                    table_markdown = "\n".join(markdown_lines)
+                    # 确保表格有正确的标记
+                    if not table_markdown.startswith('[表格内容]'):
+                        content_parts.append(f"[表格内容]\n{table_markdown}")
+                    else:
+                        content_parts.append(table_markdown)
                 else:
-                    content_parts.append(f"[图片] {content}")
+                    # 降级处理：使用文本描述
+                    if not content.startswith('[表格内容]'):
+                        content_parts.append(f"[表格内容] {content}")
+                    else:
+                        content_parts.append(content)
+            
+            elif element_type == 'text' and self._is_table_content(content):
+                # 对于被识别为表格的文本内容，添加表格标记
+                if not content.startswith('[表格内容]'):
+                    content_parts.append(f"[表格内容] {content}")
+                else:
+                    content_parts.append(content)
+            elif element_type == 'paragraph':
+                # 检查段落是否包含表格内容
+                if self._is_table_content(content) and not content.startswith('[表格内容]'):
+                    content_parts.append(f"[表格内容] {content}")
+                else:
+                    content_parts.append(content)
+            elif element_type == 'image':
+                # 对于图片，优先使用预生成的markdown格式
+                markdown_content = element.get('markdown_content', '')
+                if markdown_content:
+                    content_parts.append(markdown_content)
+                else:
+                    # 降级处理：从原始数据生成markdown
+                    original_data = element.get('original_data', {})
+                    image_url = original_data.get('url', '')
+                    image_filename = original_data.get('filename', '图片')
+                    if image_url:
+                        content_parts.append(f"![{image_filename}]({image_url})")
+                    else:
+                        content_parts.append(f"![图片]({content})")
         
         return "\n\n".join(content_parts)
     
@@ -1288,7 +1379,8 @@ class EnhancedSemanticChunker(SemanticChunker):
     """
     
     def __init__(self, config: ChunkConfig = None, model_name: str = "all-MiniLM-L6-v2", 
-                 cache_size: int = 1000, enable_fallback: bool = True):
+                 cache_size: int = 1000, enable_fallback: bool = True, 
+                 image_base_url: str = "http://localhost:8000"):
         """
         初始化增强版语义切片器
         
@@ -1297,10 +1389,11 @@ class EnhancedSemanticChunker(SemanticChunker):
             model_name: 语义模型名称
             cache_size: 缓存大小
             enable_fallback: 是否启用降级策略
+            image_base_url: 图片访问的基础URL
         """
         # 安全初始化父类
         try:
-            super().__init__(config, model_name)
+            super().__init__(config, model_name, image_base_url)
             self.initialization_success = True
             logger.info("增强版语义切片器初始化成功")
         except Exception as e:

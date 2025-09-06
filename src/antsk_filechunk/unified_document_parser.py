@@ -52,7 +52,7 @@ class DocumentContent:
 class UnifiedDocumentParser:
     """统一文档解析器主类"""
     
-    def __init__(self, image_base_url: str = "http://localhost:5000", 
+    def __init__(self, image_base_url: str = "http://localhost:8000", 
                  image_save_dir: str = "./static/images"):
         """
         初始化统一文档解析器
@@ -920,24 +920,45 @@ class UnifiedDocumentParser:
         markdown_table = []
         
         try:
-            # 确保所有行有相同的列数
-            max_cols = max(len(row) for row in table_data)
+            # 确保所有行有相同的列数，默认3列
+            target_cols = 3
             normalized_data = []
+            
             for row in table_data:
-                normalized_row = row + [""] * (max_cols - len(row))
-                cleaned_row = [str(cell).replace('\n', '<br>').replace('|', '\\|') for cell in normalized_row]
+                # 清理和规范化每个单元格
+                cleaned_row = []
+                for i in range(target_cols):
+                    if i < len(row):
+                        cell = str(row[i]).strip()
+                        # 清理单元格内容
+                        cell = cell.replace('\n', ' ').replace('\r', ' ')
+                        cell = re.sub(r'\s+', ' ', cell)  # 合并多个空格
+                        # 转义markdown特殊字符
+                        cell = cell.replace('|', '\\|')
+                        cleaned_row.append(cell)
+                    else:
+                        cleaned_row.append('')
                 normalized_data.append(cleaned_row)
             
-            # 生成表头
+            # 生成markdown表格
             if normalized_data:
-                headers = normalized_data[0] if len(normalized_data) > 1 else [f"列{i+1}" for i in range(max_cols)]
+                # 表头（第一行）
+                headers = normalized_data[0]
                 markdown_table.append("| " + " | ".join(headers) + " |")
+                
+                # 分隔线
                 markdown_table.append("| " + " | ".join(["---"] * len(headers)) + " |")
                 
-                # 生成数据行
-                data_rows = normalized_data[1:] if len(normalized_data) > 1 else normalized_data
-                for row in data_rows:
+                # 数据行（从第二行开始）
+                for row in normalized_data[1:]:
                     markdown_table.append("| " + " | ".join(row) + " |")
+            
+            # 如果只有一行数据，添加默认表头
+            if len(normalized_data) == 1:
+                # 在前面添加默认表头
+                default_headers = ['编号', '检查项', '描述']
+                markdown_table.insert(0, "| " + " | ".join(["---"] * len(default_headers)) + " |")
+                markdown_table.insert(0, "| " + " | ".join(default_headers) + " |")
             
         except Exception as e:
             logger.warning(f"表格转换失败: {str(e)}")
@@ -1155,91 +1176,128 @@ class UnifiedDocumentParser:
     def _parse_pipe_separated_table(self, text: str) -> Optional[List[List[str]]]:
         """解析用管道符分隔的表格"""
         try:
-            # 按 | 分割
-            parts = [part.strip() for part in text.split('|') if part.strip()]
+            # 按 | 分割，保留空字符串以维持表格结构
+            parts = [part.strip() for part in text.split('|')]
+            
+            # 移除首尾的空字符串
+            while parts and not parts[0]:
+                parts.pop(0)
+            while parts and not parts[-1]:
+                parts.pop()
             
             if len(parts) < 3:  # 至少需要3个部分才能构成表格
                 return None
             
-            # 尝试识别表格结构
-            # 检查是否有编号模式（如 1, 2, 3...）
             table_data = []
-            current_row = []
             
-            # 先尝试解析为三列表格（编号、检查项、描述）
-            if len(parts) >= 3:
-                # 检查第一部分是否包含表头信息
-                first_part = parts[0]
-                if any(keyword in first_part for keyword in ['编号', '检查项', '描述', '项目', '内容']):
-                    # 提取表头
-                    header_parts = first_part.split()
-                    if len(header_parts) >= 2:
-                        table_data.append(header_parts[:3] if len(header_parts) >= 3 else header_parts + ['描述'])
-                        parts = parts[1:]  # 移除已处理的表头部分
-                
-                # 如果没有表头，添加默认表头
-                if not table_data:
-                    table_data.append(['编号', '检查项', '描述'])
-                
-                # 解析数据行 - 改进的逻辑
-                i = 0
-                while i < len(parts):
-                    part = parts[i].strip()
-                    
-                    # 检查是否为编号开头（更宽松的匹配）
-                    number_match = re.match(r'^(\d+)\s*(.+)', part)
-                    if number_match:
-                        # 如果当前行有数据，先保存
-                        if current_row:
-                            table_data.append(current_row)
-                        
-                        # 开始新行
-                        number = number_match.group(1)
-                        question = number_match.group(2).strip()
-                        
-                        # 获取描述（下一个部分）
-                        description = ""
-                        if i + 1 < len(parts):
-                            description = parts[i + 1].strip()
-                            i += 1
-                        
-                        current_row = [number, question, description]
-                    else:
-                        # 如果不是编号开头，可能是描述的延续或单独的内容
-                        if current_row and len(current_row) >= 3:
-                            # 延续描述
-                            current_row[2] += " " + part
-                        elif current_row:
-                            # 添加到当前行
-                            current_row.append(part)
-                        else:
-                            # 开始新的不规则行
-                            current_row = [str(len(table_data)), part, ""]
-                    
-                    i += 1
-                
-                # 保存最后一行
-                if current_row:
-                    table_data.append(current_row)
+            # 检查第一部分是否包含表头信息
+            first_part = parts[0]
+            has_header = any(keyword in first_part for keyword in ['编号', '检查项', '描述', '项目', '内容', '序号'])
             
-            # 如果没有识别出合理的表格结构，尝试简单的三列分割
-            if not table_data or len(table_data) < 2:
-                table_data = []
-                # 添加默认表头
+            if has_header:
+                # 提取表头
+                header_parts = [p.strip() for p in first_part.split() if p.strip()]
+                if len(header_parts) >= 2:
+                    # 确保表头有3列
+                    if len(header_parts) == 2:
+                        header_parts.append('描述')
+                    table_data.append(header_parts[:3])
+                    parts = parts[1:]  # 移除已处理的表头部分
+            
+            # 如果没有表头，添加默认表头
+            if not table_data:
                 table_data.append(['编号', '检查项', '描述'])
+            
+            # 智能解析数据行
+            current_row = []
+            i = 0
+            
+            while i < len(parts):
+                part = parts[i].strip()
                 
-                # 按3个一组分割
+                # 检查是否为编号开头
+                number_match = re.match(r'^(\d+)\s*(.*)$', part)
+                if number_match:
+                    # 保存之前的行
+                    if current_row and len(current_row) >= 2:
+                        # 确保行有3列
+                        while len(current_row) < 3:
+                            current_row.append('')
+                        table_data.append(current_row[:3])
+                    
+                    # 开始新行
+                    number = number_match.group(1)
+                    remaining_text = number_match.group(2).strip()
+                    
+                    # 尝试分离问题和描述
+                    if remaining_text:
+                        # 查找问号位置来分离问题和描述
+                        question_end = remaining_text.find('?')
+                        if question_end > 0:
+                            question = remaining_text[:question_end + 1].strip()
+                            description = remaining_text[question_end + 1:].strip()
+                            # 移除可能的"示例:"前缀
+                            description = re.sub(r'^\s*示例[：:]\s*', '', description)
+                            current_row = [number, question, description]
+                        else:
+                            # 没有问号，尝试按空格分割
+                            parts_split = remaining_text.split(None, 1)
+                            if len(parts_split) >= 2:
+                                current_row = [number, parts_split[0], parts_split[1]]
+                            else:
+                                current_row = [number, remaining_text, '']
+                    else:
+                        # 编号后面没有内容，等待下一个部分
+                        current_row = [number]
+                
+                elif current_row:
+                    # 继续填充当前行
+                    if len(current_row) == 1:  # 只有编号
+                        current_row.append(part)
+                    elif len(current_row) == 2:  # 有编号和问题
+                        current_row.append(part)
+                    else:  # 已经有3列，合并到描述中
+                        current_row[2] += ' ' + part
+                else:
+                    # 没有当前行，可能是独立的内容
+                    if part:  # 非空内容
+                        current_row = [str(len(table_data)), part, '']
+                
+                i += 1
+            
+            # 保存最后一行
+            if current_row and len(current_row) >= 2:
+                while len(current_row) < 3:
+                    current_row.append('')
+                table_data.append(current_row[:3])
+            
+            # 如果解析结果不理想，尝试简单的三列分割
+            if len(table_data) < 2:
+                table_data = [['编号', '检查项', '描述']]
+                
+                # 按3个一组分割原始parts
                 for i in range(0, len(parts), 3):
                     row = parts[i:i+3]
-                    if len(row) >= 2:  # 至少有编号和检查项
+                    if len(row) >= 1 and any(cell.strip() for cell in row):
                         # 补齐到3列
                         while len(row) < 3:
                             row.append('')
-                        table_data.append(row)
+                        # 清理每个单元格
+                        cleaned_row = [cell.strip() for cell in row[:3]]
+                        table_data.append(cleaned_row)
             
-            # 验证表格数据
-            if len(table_data) >= 2 and all(len(row) >= 2 for row in table_data):
-                return table_data
+            # 最终验证和清理
+            if len(table_data) >= 2:
+                # 确保所有行都有相同的列数
+                max_cols = 3
+                cleaned_table = []
+                for row in table_data:
+                    cleaned_row = [str(cell).strip() for cell in row[:max_cols]]
+                    while len(cleaned_row) < max_cols:
+                        cleaned_row.append('')
+                    cleaned_table.append(cleaned_row)
+                
+                return cleaned_table
             
             return None
             
