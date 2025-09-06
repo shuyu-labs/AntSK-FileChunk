@@ -143,6 +143,11 @@ class SemanticAnalyzer:
         if not text or not text.strip():
             return ""
         
+        # 检查是否是图片占位符
+        if text.startswith('[IMAGE_PLACEHOLDER_'):
+            # 对于图片占位符，返回一个通用的图片描述用于语义计算
+            return "图片内容"
+        
         # 基本清理
         text = text.strip()
         

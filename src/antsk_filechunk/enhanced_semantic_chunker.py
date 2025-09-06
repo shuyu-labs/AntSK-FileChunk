@@ -400,6 +400,11 @@ class SemanticChunker:
         # 移除多余的空白字符
         text = re.sub(r'\s+', ' ', text)
         
+        # 检查是否包含markdown图片链接，如果包含则不进行特殊字符过滤
+        if '![' in text and '](' in text:
+            # 包含图片链接，只进行基本的空白字符清理
+            return text.strip()
+        
         # 移除特殊字符（保留基本标点）
         if self.config.language == "zh":
             text = re.sub(r'[^\u4e00-\u9fff\u3000-\u303fa-zA-Z0-9\s.,!?;:"""''()（）【】\[\]<>《》]', '', text)
@@ -455,7 +460,7 @@ class SemanticChunker:
                 })
                 processed_content['element_types'].append('table')
         
-        # 处理图片（图片本身不参与语义分析，但记录位置信息）
+        # 处理图片（图片参与切片但不参与语义相似度计算）
         for i, image in enumerate(document_content.images):
             # 为图片创建描述文本
             image_text = f"图片: {image.get('filename', f'image_{i+1}')}"
@@ -464,14 +469,17 @@ class SemanticChunker:
             image_filename = image.get('filename', f'image_{i+1}')
             markdown_image = f"![{image_filename}]({image_url})" if image_url else image_text
             
+            # 图片元素添加到处理列表中，但使用特殊标记
+            processed_content['texts'].append(f"[IMAGE_PLACEHOLDER_{i}]")  # 占位符用于位置标记
             processed_content['elements'].append({
                 'type': 'image',
                 'content': image_text,
                 'markdown_content': markdown_image,  # 添加markdown格式内容
                 'original_data': image,
-                'index': len(processed_content['elements'])
+                'index': len(processed_content['elements']),
+                'is_image_placeholder': True  # 标记为图片占位符
             })
-            # 图片不添加到texts中进行语义分析
+            processed_content['element_types'].append('image')
         
         logger.info(f"处理完成: {len(processed_content['texts'])} 个文本元素用于语义分析")
         return processed_content
@@ -693,6 +701,10 @@ class SemanticChunker:
             content = element['content']
             
             if element_type == 'paragraph':
+                # 检查是否是图片占位符
+                if content.startswith('[IMAGE_PLACEHOLDER_'):
+                    # 跳过占位符，图片内容会在image类型中处理
+                    continue
                 content_parts.append(content)
             elif element_type == 'table':
                 # 对于表格，优先使用markdown格式

@@ -202,6 +202,22 @@ class UnifiedDocumentParser:
             # 获取文档元数据
             metadata = self._extract_docx_metadata(doc)
             
+            # 先提取所有图片信息，建立图片映射
+            all_images = self._extract_docx_images_unified(doc)
+            image_map = {}  # 用于存储图片关系ID到图片信息的映射
+            
+            # 建立图片关系映射
+            try:
+                for rel_id, rel in doc.part.rels.items():
+                    if "image" in rel.target_ref:
+                        # 查找对应的图片信息
+                        for img_info in all_images:
+                            if img_info.get('rel_id') == rel_id or img_info.get('path', '').endswith(rel.target_ref.split('/')[-1]):
+                                image_map[rel_id] = img_info
+                                break
+            except Exception as e:
+                logger.warning(f"建立图片映射时出错: {str(e)}")
+            
             # 处理段落（使用enhanced_parser的逻辑）
             for i, paragraph in enumerate(doc.paragraphs):
                 try:
@@ -210,6 +226,17 @@ class UnifiedDocumentParser:
                         paragraphs.append(para_data)
                     if para_markdown:
                         markdown_lines.extend(para_markdown)
+                    
+                    # 检查段落中是否包含图片
+                    para_images = self._extract_paragraph_images(paragraph, image_map)
+                    if para_images:
+                        # 将图片添加到当前位置
+                        for img_info in para_images:
+                            if img_info not in images:  # 避免重复添加
+                                images.append(img_info)
+                                markdown_lines.append(f"![{img_info.get('filename', '图片')}]({img_info['url']})")
+                                markdown_lines.append("")
+                        
                 except Exception as e:
                     logger.warning(f"处理第{i+1}个段落时出错: {str(e)}")
                     continue
@@ -228,16 +255,17 @@ class UnifiedDocumentParser:
                     logger.warning(f"处理第{i+1}个表格时出错: {str(e)}")
                     markdown_lines.append(f"\n*[表格 {i+1} 解析失败]*\n")
             
-            # 处理图片（使用enhanced_parser的图片提取功能）
+            # 添加剩余未处理的图片（如果有的话）
             try:
-                images = self._extract_docx_images_unified(doc)
-                if images:
-                    markdown_lines.append("\n## 文档图片\n")
-                    for i, img_info in enumerate(images):
-                        markdown_lines.append(f"![图片{i+1}]({img_info['url']})")
+                remaining_images = [img for img in all_images if img not in images]
+                if remaining_images:
+                    markdown_lines.append("\n## 其他图片\n")
+                    for img_info in remaining_images:
+                        images.append(img_info)
+                        markdown_lines.append(f"![{img_info.get('filename', '图片')}]({img_info['url']})")
                         markdown_lines.append("")
             except Exception as e:
-                logger.warning(f"提取DOCX图片时出错: {str(e)}")
+                logger.warning(f"处理剩余图片时出错: {str(e)}")
             
             # 后处理段落
             paragraphs = self._postprocess_paragraphs(paragraphs)
@@ -848,7 +876,8 @@ class UnifiedDocumentParser:
                                 "url": image_url,
                                 "size": len(image_data),
                                 "format": image_ext,
-                                "type": "image"
+                                "type": "image",
+                                "rel_id": rel_id  # 添加关系ID用于映射
                             })
                         else:
                             os.remove(image_path)
@@ -861,6 +890,33 @@ class UnifiedDocumentParser:
             logger.warning(f"DOCX图片提取失败: {str(e)}")
         
         return images_info
+    
+    def _extract_paragraph_images(self, paragraph, image_map: Dict) -> List[Dict]:
+        """从段落中提取图片信息"""
+        para_images = []
+        
+        try:
+            # 检查段落中的运行（runs）是否包含图片
+            for run in paragraph.runs:
+                # 检查运行中的绘图元素
+                for drawing in run._element.xpath('.//a:blip'):
+                    # 获取图片的关系ID
+                    embed_attr = drawing.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
+                    if embed_attr and embed_attr in image_map:
+                        para_images.append(image_map[embed_attr])
+                
+                # 也检查内联形状
+                for inline in run._element.xpath('.//wp:inline'):
+                    blips = inline.xpath('.//a:blip')
+                    for blip in blips:
+                        embed_attr = blip.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
+                        if embed_attr and embed_attr in image_map:
+                            para_images.append(image_map[embed_attr])
+                            
+        except Exception as e:
+            logger.warning(f"提取段落图片时出错: {str(e)}")
+        
+        return para_images
     
     def _extract_xlsx_images_unified(self, file_path: str) -> List[Dict]:
         """从xlsx文件中提取图片"""
