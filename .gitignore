@@ -149,3 +149,4 @@ demo_ai_document.txt
 .cache/
 models/
 transformers_cache/
+/static/images
