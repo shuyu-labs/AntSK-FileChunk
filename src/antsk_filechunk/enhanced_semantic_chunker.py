@@ -26,7 +26,7 @@ import nltk
 import jieba
 from tqdm import tqdm
 
-from .document_parser import DocumentParser
+from .unified_document_parser import UnifiedDocumentParser
 from .semantic_analyzer import SemanticAnalyzer
 from .chunk_optimizer import ChunkOptimizer
 from .quality_evaluator import QualityEvaluator
@@ -87,7 +87,7 @@ class SemanticChunker:
             logger.info("正在初始化语义切片器组件...")
             
             # 文档解析器
-            self.document_parser = DocumentParser()
+            self.document_parser = UnifiedDocumentParser()
             
             # 语义分析器
             self.semantic_analyzer = SemanticAnalyzer(
@@ -125,22 +125,22 @@ class SemanticChunker:
         logger.info(f"开始处理文件: {file_path}")
         
         try:
-            # 1. 文档解析
+            # 1. 文档解析（使用新的统一解析器）
             document_content = self.document_parser.parse_file(file_path)
-            logger.info(f"文档解析完成，共提取 {len(document_content.paragraphs)} 个段落")
+            logger.info(f"文档解析完成，共提取 {len(document_content.paragraphs)} 个段落，{len(document_content.tables)} 个表格，{len(document_content.images)} 张图片")
             
-            # 2. 预处理和段落分析
-            processed_paragraphs = self._preprocess_paragraphs(document_content.paragraphs)
+            # 2. 处理文档内容（包括表格和图片）
+            processed_content = self._process_document_content_unified(document_content)
             
             # 3. 语义分析
-            semantic_embeddings = self.semantic_analyzer.compute_embeddings(processed_paragraphs)
+            semantic_embeddings = self.semantic_analyzer.compute_embeddings(processed_content['texts'])
             logger.info("语义向量计算完成")
             
-            # 4. 智能切片
-            chunks = self._semantic_chunking(
-                processed_paragraphs, 
+            # 4. 智能切片（使用增强的切片方法）
+            chunks = self._semantic_chunking_unified(
+                processed_content, 
                 semantic_embeddings,
-                document_content.metadata
+                document_content
             )
             
             # 5. 切片优化
@@ -150,6 +150,10 @@ class SemanticChunker:
             # 6. 质量评估
             quality_scores = self.quality_evaluator.evaluate_chunks(optimized_chunks)
             self._attach_quality_scores(optimized_chunks, quality_scores)
+            
+            # 7. 附加文档元信息（如果有document_content）
+            if document_content:
+                self._attach_document_metadata(optimized_chunks, document_content)
             
             logger.info(f"文件处理完成: {file_path}")
             return optimized_chunks
@@ -181,15 +185,18 @@ class SemanticChunker:
             # 2. 预处理和段落分析
             processed_paragraphs = self._preprocess_text_paragraphs(paragraphs)
             
-            # 3. 语义分析
-            semantic_embeddings = self.semantic_analyzer.compute_embeddings(processed_paragraphs)
+            # 3. 检测和处理表格内容
+            processed_content = self._process_text_content_for_tables(processed_paragraphs)
+            
+            # 4. 语义分析
+            semantic_embeddings = self.semantic_analyzer.compute_embeddings(processed_content['texts'])
             logger.info("语义向量计算完成")
             
-            # 4. 智能切片
-            chunks = self._semantic_chunking(
-                processed_paragraphs, 
+            # 5. 智能切片（使用增强的切片方法）
+            chunks = self._semantic_chunking_unified(
+                processed_content, 
                 semantic_embeddings,
-                {"source": "text_input", "total_length": len(text)}
+                None  # 没有document_content对象
             )
             
             # 5. 切片优化
@@ -268,6 +275,12 @@ class SemanticChunker:
             if not content:
                 continue
             
+            # 检查是否为表格内容，如果是则进行特殊处理
+            if self._is_table_content(content):
+                # 对表格内容进行特殊标记，以便后续处理
+                if not content.startswith('[表格内容]'):
+                    content = f"[表格内容] {content}"
+            
             # 基本清理
             content = re.sub(r'\s+', ' ', content)  # 规范化空白字符
             content = content.replace('\t', ' ')    # 替换制表符
@@ -279,6 +292,39 @@ class SemanticChunker:
             processed.append(content)
         
         return processed
+    
+    def _is_table_content(self, text: str) -> bool:
+        """
+        检查文本是否为表格内容
+        
+        Args:
+            text: 输入文本
+            
+        Returns:
+            是否为表格内容
+        """
+        # 检查是否已经标记为表格内容
+        if text.startswith('[表格内容]'):
+            return True
+        
+        # 检查是否包含多个管道符分隔符
+        pipe_count = text.count('|')
+        if pipe_count >= 3:
+            return True
+        
+        # 检查是否为markdown表格格式
+        lines = text.split('\n')
+        if len(lines) >= 2:
+            has_separator = any('---' in line for line in lines)
+            has_pipes = any('|' in line for line in lines)
+            if has_separator and has_pipes:
+                return True
+        
+        # 检查是否包含表格关键词和结构
+        if any(keyword in text for keyword in ['编号', '检查项', '描述']) and pipe_count >= 2:
+            return True
+        
+        return False
     
     def _preprocess_paragraphs(self, paragraphs: List[Dict]) -> List[str]:
         """
@@ -329,6 +375,377 @@ class SemanticChunker:
             text = re.sub(r'[^\w\s.,!?;:"""\'()[\]<>-]', '', text)
         
         return text.strip()
+    
+    def _process_document_content_unified(self, document_content) -> Dict:
+        """
+        处理统一文档内容，包括段落、表格和图片
+        
+        Args:
+            document_content: 统一文档内容对象
+            
+        Returns:
+            处理后的内容字典
+        """
+        processed_content = {
+            'texts': [],           # 用于语义分析的文本列表
+            'elements': [],        # 所有元素的详细信息
+            'element_types': [],   # 元素类型列表
+            'markdown_content': document_content.markdown_content
+        }
+        
+        # 处理段落
+        for i, para in enumerate(document_content.paragraphs):
+            content = para.get('content', '').strip()
+            if content and len(content) >= 10:
+                cleaned_content = self._clean_text(content)
+                if cleaned_content:
+                    processed_content['texts'].append(cleaned_content)
+                    processed_content['elements'].append({
+                        'type': 'paragraph',
+                        'content': cleaned_content,
+                        'original_data': para,
+                        'index': len(processed_content['elements'])
+                    })
+                    processed_content['element_types'].append('paragraph')
+        
+        # 处理表格
+        for i, table in enumerate(document_content.tables):
+            # 将表格转换为文本描述用于语义分析
+            table_text = self._table_to_text(table)
+            if table_text:
+                processed_content['texts'].append(table_text)
+                processed_content['elements'].append({
+                    'type': 'table',
+                    'content': table_text,
+                    'original_data': table,
+                    'markdown': table.get('markdown', []),
+                    'index': len(processed_content['elements'])
+                })
+                processed_content['element_types'].append('table')
+        
+        # 处理图片（图片本身不参与语义分析，但记录位置信息）
+        for i, image in enumerate(document_content.images):
+            # 为图片创建描述文本
+            image_text = f"图片: {image.get('filename', f'image_{i+1}')}"
+            processed_content['elements'].append({
+                'type': 'image',
+                'content': image_text,
+                'original_data': image,
+                'index': len(processed_content['elements'])
+            })
+            # 图片不添加到texts中进行语义分析
+        
+        logger.info(f"处理完成: {len(processed_content['texts'])} 个文本元素用于语义分析")
+        return processed_content
+    
+    def _process_text_content_for_tables(self, texts: List[str]) -> Dict:
+        """
+        处理文本内容，检测并提取表格
+        
+        Args:
+            texts: 文本列表
+            
+        Returns:
+            处理后的内容字典
+        """
+        processed_content = {
+            'texts': [],           # 用于语义分析的文本列表
+            'elements': [],        # 所有元素的详细信息
+            'element_types': [],   # 元素类型列表
+            'markdown_content': ""
+        }
+        
+        for i, text in enumerate(texts):
+            # 检查是否为表格内容
+            if self._is_table_content(text):
+                # 尝试解析表格
+                from .unified_document_parser import UnifiedDocumentParser
+                parser = UnifiedDocumentParser()
+                table_data = parser._detect_and_parse_table_from_text(text)
+                
+                if table_data:
+                    # 创建表格对象
+                    table_obj = {
+                        'index': len([e for e in processed_content['elements'] if e['type'] == 'table']),
+                        'data': table_data,
+                        'rows': len(table_data),
+                        'cols': len(table_data[0]) if table_data else 0,
+                        'type': 'table',
+                        'markdown': parser._convert_list_to_markdown_table(table_data)
+                    }
+                    
+                    # 将表格转换为文本描述用于语义分析
+                    table_text = self._table_to_text(table_obj)
+                    
+                    processed_content['texts'].append(table_text)
+                    processed_content['elements'].append({
+                        'type': 'table',
+                        'content': table_text,
+                        'original_data': table_obj,
+                        'markdown': table_obj['markdown'],
+                        'index': len(processed_content['elements'])
+                    })
+                    processed_content['element_types'].append('table')
+                else:
+                    # 如果解析失败，作为普通文本处理
+                    cleaned_text = self._clean_text(text)
+                    processed_content['texts'].append(cleaned_text)
+                    processed_content['elements'].append({
+                        'type': 'paragraph',
+                        'content': cleaned_text,
+                        'original_data': {'content': text, 'index': i, 'type': 'paragraph'},
+                        'index': len(processed_content['elements'])
+                    })
+                    processed_content['element_types'].append('paragraph')
+            else:
+                # 普通文本处理
+                cleaned_text = self._clean_text(text)
+                processed_content['texts'].append(cleaned_text)
+                processed_content['elements'].append({
+                    'type': 'paragraph',
+                    'content': cleaned_text,
+                    'original_data': {'content': text, 'index': i, 'type': 'paragraph'},
+                    'index': len(processed_content['elements'])
+                })
+                processed_content['element_types'].append('paragraph')
+        
+        return processed_content
+    
+    def _table_to_text(self, table: Dict) -> str:
+        """
+        将表格转换为文本描述
+        
+        Args:
+            table: 表格数据
+            
+        Returns:
+            表格的文本描述
+        """
+        try:
+            table_data = table.get('data', [])
+            if not table_data:
+                return ""
+            
+            # 简单的表格文本化：将所有单元格内容连接
+            text_parts = []
+            for row in table_data:
+                row_text = " ".join([str(cell).strip() for cell in row if str(cell).strip()])
+                if row_text:
+                    text_parts.append(row_text)
+            
+            return " | ".join(text_parts) if text_parts else ""
+            
+        except Exception as e:
+            logger.warning(f"表格文本化失败: {e}")
+            return ""
+    
+    def _semantic_chunking_unified(
+        self, 
+        processed_content: Dict, 
+        embeddings: np.ndarray,
+        document_content
+    ) -> List[TextChunk]:
+        """
+        执行统一的语义切片（支持表格和图片）
+        
+        Args:
+            processed_content: 处理后的内容
+            embeddings: 语义向量
+            document_content: 原始文档内容
+            
+        Returns:
+            文本切片列表
+        """
+        if len(processed_content['texts']) == 0:
+            return []
+        
+        try:
+            # 1. 找到语义边界
+            boundaries = self.semantic_analyzer.find_semantic_boundaries(
+                embeddings, 
+                threshold=self.config.semantic_threshold
+            )
+            
+            # 确保边界列表不为空
+            if not boundaries or len(boundaries) < 2:
+                boundaries = [0, len(processed_content['texts'])]
+            
+            chunks = []
+            
+            # 2. 根据边界创建切片
+            for i in range(len(boundaries) - 1):
+                start_idx = boundaries[i]
+                end_idx = boundaries[i + 1]
+                
+                # 收集这个范围内的所有元素
+                chunk_elements = []
+                chunk_texts = []
+                
+                for j in range(start_idx, end_idx):
+                    if j < len(processed_content['elements']):
+                        element = processed_content['elements'][j]
+                        chunk_elements.append(element)
+                        chunk_texts.append(element['content'])
+                
+                if chunk_texts:
+                    # 合并文本内容
+                    chunk_content = self._merge_chunk_content(chunk_elements)
+                    
+                    # 创建切片对象
+                    chunk = TextChunk(
+                        content=chunk_content,
+                        start_pos=start_idx,
+                        end_pos=end_idx,
+                        semantic_score=self._calculate_chunk_semantic_score(list(range(start_idx, end_idx)), embeddings),
+                        token_count=len(chunk_content.split()),
+                        paragraph_indices=list(range(start_idx, end_idx)),
+                        chunk_type=self._determine_chunk_type(chunk_elements),
+                        metadata={
+                            'elements': chunk_elements,
+                            'element_count': len(chunk_elements),
+                            'has_table': any(e['type'] == 'table' for e in chunk_elements),
+                            'has_image': any(e['type'] == 'image' for e in chunk_elements),
+                            'source_file': document_content.file_info.get('name', '') if document_content else '',
+                            'file_format': document_content.file_info.get('format', '') if document_content else 'text'
+                        }
+                    )
+                    
+                    chunks.append(chunk)
+            
+            logger.info(f"语义切片完成，生成 {len(chunks)} 个切片")
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"统一语义切片失败: {e}")
+            # 降级到简单切片
+            return self._fallback_chunking(processed_content['texts'])
+    
+    def _merge_chunk_content(self, elements: List[Dict]) -> str:
+        """
+        合并切片元素内容
+        
+        Args:
+            elements: 元素列表
+            
+        Returns:
+            合并后的内容
+        """
+        content_parts = []
+        
+        for element in elements:
+            element_type = element['type']
+            content = element['content']
+            
+            if element_type == 'paragraph':
+                content_parts.append(content)
+            elif element_type == 'table':
+                # 对于表格，添加标识和内容
+                content_parts.append(f"[表格内容] {content}")
+            elif element_type == 'image':
+                # 对于图片，添加引用
+                original_data = element.get('original_data', {})
+                image_url = original_data.get('url', '')
+                if image_url:
+                    content_parts.append(f"[图片] {image_url}")
+                else:
+                    content_parts.append(f"[图片] {content}")
+        
+        return "\n\n".join(content_parts)
+    
+    def _determine_chunk_type(self, elements: List[Dict]) -> str:
+        """
+        确定切片类型
+        
+        Args:
+            elements: 元素列表
+            
+        Returns:
+            切片类型
+        """
+        has_table = any(e['type'] == 'table' for e in elements)
+        has_image = any(e['type'] == 'image' for e in elements)
+        has_paragraph = any(e['type'] == 'paragraph' for e in elements)
+        
+        if has_table and has_image:
+            return 'mixed_content'
+        elif has_table:
+            return 'table_content'
+        elif has_image:
+            return 'image_content'
+        elif has_paragraph:
+            return 'text_content'
+        else:
+            return 'unknown'
+    
+    def _attach_document_metadata(self, chunks: List[TextChunk], document_content) -> None:
+        """
+        为切片附加文档元数据
+        
+        Args:
+            chunks: 切片列表
+            document_content: 文档内容
+        """
+        for chunk in chunks:
+            if chunk.metadata is None:
+                chunk.metadata = {}
+            
+            chunk.metadata.update({
+                'document_metadata': document_content.metadata,
+                'document_structure': document_content.structure,
+                'total_tables': len(document_content.tables),
+                'total_images': len(document_content.images),
+                'markdown_available': bool(document_content.markdown_content)
+            })
+    
+    def _fallback_chunking(self, texts: List[str]) -> List[TextChunk]:
+        """
+        降级切片方法（当语义切片失败时使用）
+        
+        Args:
+            texts: 文本列表
+            
+        Returns:
+            文本切片列表
+        """
+        chunks = []
+        current_chunk = ""
+        current_start = 0
+        
+        for i, text in enumerate(texts):
+            if len(current_chunk) + len(text) <= self.config.max_chunk_size:
+                current_chunk += text + "\n\n"
+            else:
+                if current_chunk.strip():
+                    chunk = TextChunk(
+                        content=current_chunk.strip(),
+                        start_pos=current_start,
+                        end_pos=i,
+                        semantic_score=0.5,  # 默认分数
+                        token_count=len(current_chunk.split()),
+                        paragraph_indices=list(range(current_start, i)),
+                        chunk_type="fallback",
+                        metadata={"method": "fallback_chunking"}
+                    )
+                    chunks.append(chunk)
+                
+                current_chunk = text + "\n\n"
+                current_start = i
+        
+        # 处理最后一个切片
+        if current_chunk.strip():
+            chunk = TextChunk(
+                content=current_chunk.strip(),
+                start_pos=current_start,
+                end_pos=len(texts),
+                semantic_score=0.5,
+                token_count=len(current_chunk.split()),
+                paragraph_indices=list(range(current_start, len(texts))),
+                chunk_type="fallback",
+                metadata={"method": "fallback_chunking"}
+            )
+            chunks.append(chunk)
+        
+        return chunks
     
     def _semantic_chunking(
         self, 

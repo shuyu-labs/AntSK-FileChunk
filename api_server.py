@@ -81,6 +81,11 @@ class ChunkResponse(BaseModel):
     paragraph_indices: List[int] = Field(description="包含的段落索引")
     chunk_type: str = Field(description="切片类型")
     metadata: Dict = Field(description="元数据信息")
+    # 新增字段
+    has_table: Optional[bool] = Field(default=False, description="是否包含表格")
+    has_image: Optional[bool] = Field(default=False, description="是否包含图片")
+    element_count: Optional[int] = Field(default=0, description="包含的元素数量")
+    content_types: Optional[List[str]] = Field(default=[], description="内容类型列表")
 
 class ProcessResponse(BaseModel):
     """处理结果响应模型"""
@@ -90,6 +95,9 @@ class ProcessResponse(BaseModel):
     total_chunks: int = Field(description="切片总数")
     processing_time: float = Field(description="处理时间（秒）")
     file_info: Dict = Field(description="文件信息")
+    # 新增字段
+    document_summary: Optional[Dict] = Field(default={}, description="文档摘要信息")
+    extraction_info: Optional[Dict] = Field(default={}, description="提取信息统计")
 
 @app.on_event("startup")
 async def startup_event():
@@ -140,10 +148,11 @@ async def process_file(
             raise HTTPException(status_code=400, detail="文件名不能为空")
         
         file_ext = Path(file.filename).suffix.lower()
-        if file_ext not in ['.pdf', '.docx', '.doc', '.txt']:
+        supported_formats = ['.pdf', '.docx', '.txt', '.xlsx', '.xls', '.pptx']
+        if file_ext not in supported_formats:
             raise HTTPException(
                 status_code=400, 
-                detail=f"不支持的文件格式: {file_ext}，支持格式: .pdf, .docx, .doc, .txt"
+                detail=f"不支持的文件格式: {file_ext}，支持格式: {', '.join(supported_formats)}"
             )
         
         # 解析配置
@@ -186,7 +195,33 @@ async def process_file(
         
         # 转换为响应格式
         chunk_responses = []
+        total_tables = 0
+        total_images = 0
+        
         for chunk in chunks:
+            # 提取新的元数据信息
+            chunk_metadata = chunk.metadata or {}
+            has_table = chunk_metadata.get('has_table', False)
+            has_image = chunk_metadata.get('has_image', False)
+            element_count = chunk_metadata.get('element_count', 0)
+            
+            # 统计总数
+            if has_table:
+                total_tables += 1
+            if has_image:
+                total_images += 1
+            
+            # 确定内容类型
+            content_types = []
+            if chunk.chunk_type == 'table_content':
+                content_types.append('table')
+            elif chunk.chunk_type == 'image_content':
+                content_types.append('image')
+            elif chunk.chunk_type == 'mixed_content':
+                content_types.extend(['text', 'table', 'image'])
+            else:
+                content_types.append('text')
+            
             chunk_response = ChunkResponse(
                 content=chunk.content,
                 start_pos=chunk.start_pos,
@@ -195,7 +230,11 @@ async def process_file(
                 token_count=safe_convert_numeric(chunk.token_count),
                 paragraph_indices=chunk.paragraph_indices,
                 chunk_type=chunk.chunk_type,
-                metadata=safe_convert_numeric(chunk.metadata)  # 转换metadata
+                metadata=safe_convert_numeric(chunk.metadata),
+                has_table=has_table,
+                has_image=has_image,
+                element_count=element_count,
+                content_types=content_types
             )
             chunk_responses.append(chunk_response)
         
@@ -212,6 +251,18 @@ async def process_file(
                 "size": len(content),
                 "type": file_ext,
                 "content_type": file.content_type
+            },
+            document_summary={
+                "total_paragraphs": sum(1 for chunk in chunks if chunk.chunk_type in ['text_content', 'mixed_content']),
+                "total_tables": total_tables,
+                "total_images": total_images,
+                "chunk_types": list(set(chunk.chunk_type for chunk in chunks))
+            },
+            extraction_info={
+                "chunks_with_tables": total_tables,
+                "chunks_with_images": total_images,
+                "average_chunk_size": sum(chunk.token_count for chunk in chunks) / len(chunks) if chunks else 0,
+                "supported_formats": ['.pdf', '.docx', '.txt', '.xlsx', '.xls', '.pptx']
             }
         )
         
@@ -260,7 +311,7 @@ async def process_text(
         # 处理文本
         chunks = chunker.process_text(text)
         
-        # 转换为响应格式
+        # 转换为响应格式（文本处理简化版）
         chunk_responses = []
         for chunk in chunks:
             chunk_response = ChunkResponse(
@@ -271,7 +322,11 @@ async def process_text(
                 token_count=safe_convert_numeric(chunk.token_count),
                 paragraph_indices=chunk.paragraph_indices,
                 chunk_type=chunk.chunk_type,
-                metadata=safe_convert_numeric(chunk.metadata)  # 转换metadata
+                metadata=safe_convert_numeric(chunk.metadata),
+                has_table=False,  # 纯文本不包含表格
+                has_image=False,  # 纯文本不包含图片
+                element_count=1,  # 每个切片一个文本元素
+                content_types=['text']
             )
             chunk_responses.append(chunk_response)
         
@@ -287,6 +342,18 @@ async def process_text(
                 "type": "text",
                 "size": len(text),
                 "encoding": "utf-8"
+            },
+            document_summary={
+                "total_paragraphs": len(chunks),
+                "total_tables": 0,
+                "total_images": 0,
+                "chunk_types": ['text_content']
+            },
+            extraction_info={
+                "chunks_with_tables": 0,
+                "chunks_with_images": 0,
+                "average_chunk_size": sum(chunk.token_count for chunk in chunks) / len(chunks) if chunks else 0,
+                "supported_formats": ['.pdf', '.docx', '.txt', '.xlsx', '.xls', '.pptx']
             }
         )
         

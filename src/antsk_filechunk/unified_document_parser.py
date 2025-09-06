@@ -1,0 +1,1287 @@
+"""
+统一文档解析器
+整合enhanced_parser和document_parser copy的功能，提供统一的接口
+支持PDF、Word、Excel、PowerPoint文档的解析，包括表格和图片的提取
+"""
+
+import os
+import uuid
+import logging
+import re
+from pathlib import Path
+from typing import Dict, List, Tuple, Optional, Union
+from dataclasses import dataclass
+import docx
+from docx.shared import Inches
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+import fitz  # PyMuPDF
+from PIL import Image
+import io
+import chardet
+
+# 导入新增的解析库
+try:
+    from pptx import Presentation
+except ImportError:
+    Presentation = None
+
+try:
+    import openpyxl
+    from openpyxl import load_workbook
+except ImportError:
+    openpyxl = None
+
+try:
+    import xlrd
+except ImportError:
+    xlrd = None
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class DocumentContent:
+    """统一的文档内容数据结构"""
+    paragraphs: List[Dict]  # 段落列表，每个段落包含内容和元数据
+    tables: List[Dict]      # 表格列表（包含markdown格式）
+    images: List[Dict]      # 图片信息列表
+    metadata: Dict          # 文档元数据
+    structure: Dict         # 文档结构信息
+    markdown_content: str   # 完整的markdown内容
+    file_info: Dict         # 文件基本信息
+
+class UnifiedDocumentParser:
+    """统一文档解析器主类"""
+    
+    def __init__(self, image_base_url: str = "http://localhost:5000", 
+                 image_save_dir: str = "./static/images"):
+        """
+        初始化统一文档解析器
+        
+        Args:
+            image_base_url: 图片访问的基础URL
+            image_save_dir: 图片保存目录
+        """
+        self.image_base_url = image_base_url
+        self.image_save_dir = Path(image_save_dir)
+        self.image_save_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 支持的文件格式（仅跨平台格式）
+        self.supported_formats = {'.pdf', '.docx', '.txt', '.xlsx', '.xls', '.pptx'}
+        
+        # 支持的图片格式
+        self.supported_image_formats = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+        
+    def parse_file(self, file_path: Union[str, Path]) -> DocumentContent:
+        """
+        解析文档文件（统一接口）
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            统一的文档内容对象
+        """
+        file_path = Path(file_path)
+        
+        if not file_path.exists():
+            raise FileNotFoundError(f"文件不存在: {file_path}")
+        
+        file_extension = file_path.suffix.lower()
+        
+        if file_extension not in self.supported_formats:
+            raise ValueError(f"不支持的文件格式: {file_extension}。支持的格式：{', '.join(self.supported_formats)}")
+        
+        logger.info(f"开始解析文件: {file_path} (格式: {file_extension})")
+        
+        try:
+            # 根据文件类型调用相应的解析方法
+            if file_extension == '.pdf':
+                return self._parse_pdf_unified(file_path)
+            elif file_extension == '.docx':
+                return self._parse_docx_unified(file_path)
+            elif file_extension == '.txt':
+                return self._parse_txt_unified(file_path)
+            elif file_extension == '.xlsx':
+                return self._parse_xlsx_unified(file_path)
+            elif file_extension == '.xls':
+                return self._parse_xls_unified(file_path)
+            elif file_extension == '.pptx':
+                return self._parse_pptx_unified(file_path)
+            else:
+                raise ValueError(f"未实现的文件格式处理: {file_extension}")
+                
+        except Exception as e:
+            logger.error(f"文件解析失败: {e}")
+            raise
+    
+    def _parse_pdf_unified(self, file_path: Path) -> DocumentContent:
+        """统一的PDF解析方法"""
+        try:
+            doc = fitz.open(str(file_path))
+            paragraphs = []
+            tables = []
+            images = []
+            markdown_lines = []
+            
+            total_pages = len(doc)
+            logger.info(f"PDF文档共{total_pages}页")
+            
+            # 获取文档元数据
+            metadata = self._extract_pdf_metadata(doc)
+            
+            for page_num in range(total_pages):
+                page = doc.load_page(page_num)
+                
+                # 提取文本内容（使用enhanced_parser的逻辑）
+                text = page.get_text()
+                if text.strip():
+                    page_paragraphs, page_markdown = self._process_pdf_text_unified(text, page_num)
+                    paragraphs.extend(page_paragraphs)
+                    markdown_lines.extend(page_markdown)
+                
+                # 提取表格（简化版）
+                page_tables = self._extract_pdf_tables_unified(page, page_num)
+                tables.extend(page_tables)
+                
+                # 提取图片
+                page_images = self._extract_pdf_images_unified(page, page_num)
+                if page_images:
+                    images.extend(page_images)
+                    # 在markdown中添加图片
+                    for img_info in page_images:
+                        markdown_lines.append(f"![图片]({img_info['url']})")
+                        markdown_lines.append("")
+            
+            doc.close()
+            
+            # 后处理段落
+            paragraphs = self._postprocess_paragraphs(paragraphs)
+            
+            # 构建文档结构
+            structure = self._build_document_structure(paragraphs, tables, images)
+            
+            # 生成完整的markdown内容
+            markdown_content = self._clean_markdown(markdown_lines)
+            
+            # 文件信息
+            file_info = {
+                "name": file_path.name,
+                "size": file_path.stat().st_size,
+                "format": "pdf",
+                "pages": total_pages
+            }
+            
+            return DocumentContent(
+                paragraphs=paragraphs,
+                tables=tables,
+                images=images,
+                metadata=metadata,
+                structure=structure,
+                markdown_content=markdown_content,
+                file_info=file_info
+            )
+            
+        except Exception as e:
+            logger.error(f"PDF解析失败: {e}")
+            raise
+    
+    def _parse_docx_unified(self, file_path: Path) -> DocumentContent:
+        """统一的DOCX解析方法"""
+        try:
+            doc = docx.Document(str(file_path))
+            paragraphs = []
+            tables = []
+            images = []
+            markdown_lines = []
+            
+            total_paragraphs = len(doc.paragraphs)
+            total_tables = len(doc.tables)
+            
+            logger.info(f"DOCX文档包含{total_paragraphs}个段落和{total_tables}个表格")
+            
+            # 获取文档元数据
+            metadata = self._extract_docx_metadata(doc)
+            
+            # 处理段落（使用enhanced_parser的逻辑）
+            for i, paragraph in enumerate(doc.paragraphs):
+                try:
+                    para_data, para_markdown = self._process_docx_paragraph_unified(paragraph, i)
+                    if para_data:
+                        paragraphs.append(para_data)
+                    if para_markdown:
+                        markdown_lines.extend(para_markdown)
+                except Exception as e:
+                    logger.warning(f"处理第{i+1}个段落时出错: {str(e)}")
+                    continue
+            
+            # 处理表格（使用enhanced_parser的表格转markdown功能）
+            for i, table in enumerate(doc.tables):
+                try:
+                    table_data = self._extract_docx_table_unified(table, i)
+                    if table_data:
+                        tables.append(table_data)
+                        # 添加表格的markdown到内容中
+                        markdown_lines.append(f"\n**表格 {i+1}:**\n")
+                        markdown_lines.extend(table_data.get('markdown', []))
+                        markdown_lines.append("")
+                except Exception as e:
+                    logger.warning(f"处理第{i+1}个表格时出错: {str(e)}")
+                    markdown_lines.append(f"\n*[表格 {i+1} 解析失败]*\n")
+            
+            # 处理图片（使用enhanced_parser的图片提取功能）
+            try:
+                images = self._extract_docx_images_unified(doc)
+                if images:
+                    markdown_lines.append("\n## 文档图片\n")
+                    for i, img_info in enumerate(images):
+                        markdown_lines.append(f"![图片{i+1}]({img_info['url']})")
+                        markdown_lines.append("")
+            except Exception as e:
+                logger.warning(f"提取DOCX图片时出错: {str(e)}")
+            
+            # 后处理段落
+            paragraphs = self._postprocess_paragraphs(paragraphs)
+            
+            # 构建文档结构
+            structure = self._build_document_structure(paragraphs, tables, images)
+            
+            # 生成完整的markdown内容
+            markdown_content = self._clean_markdown(markdown_lines)
+            
+            # 文件信息
+            file_info = {
+                "name": file_path.name,
+                "size": file_path.stat().st_size,
+                "format": "docx",
+                "paragraphs": total_paragraphs,
+                "tables": total_tables
+            }
+            
+            return DocumentContent(
+                paragraphs=paragraphs,
+                tables=tables,
+                images=images,
+                metadata=metadata,
+                structure=structure,
+                markdown_content=markdown_content,
+                file_info=file_info
+            )
+            
+        except Exception as e:
+            logger.error(f"DOCX解析失败: {e}")
+            raise
+    
+    def _parse_txt_unified(self, file_path: Path) -> DocumentContent:
+        """统一的TXT解析方法"""
+        try:
+            # 检测文件编码
+            with open(file_path, 'rb') as f:
+                raw_data = f.read()
+                encoding = chardet.detect(raw_data)['encoding'] or 'utf-8'
+            
+            # 读取文本内容
+            with open(file_path, 'r', encoding=encoding) as f:
+                content = f.read()
+            
+            # 按空行分割段落
+            para_texts = re.split(r'\n\s*\n', content)
+            
+            paragraphs = []
+            tables = []
+            markdown_lines = []
+            
+            for i, para_text in enumerate(para_texts):
+                para_text = para_text.strip()
+                if para_text and len(para_text) > 10:
+                    # 检查是否为表格内容
+                    table_data = self._detect_and_parse_table_from_text(para_text)
+                    if table_data:
+                        # 创建表格对象
+                        table_obj = {
+                            'index': len(tables),
+                            'data': table_data,
+                            'rows': len(table_data),
+                            'cols': len(table_data[0]) if table_data else 0,
+                            'type': 'table',
+                            'markdown': self._convert_list_to_markdown_table(table_data)
+                        }
+                        tables.append(table_obj)
+                        
+                        # 添加表格的markdown到内容中
+                        markdown_lines.append(f"\n**表格 {len(tables)}:**\n")
+                        markdown_lines.extend(table_obj['markdown'])
+                        markdown_lines.append("")
+                    else:
+                        # 普通段落
+                        paragraphs.append({
+                            'content': para_text,
+                            'index': i,
+                            'type': 'paragraph',
+                            'line_start': 0,  # 简化处理
+                            'line_end': 0
+                        })
+                        markdown_lines.append(para_text)
+                        markdown_lines.append("")
+            
+            metadata = {
+                'title': file_path.stem,
+                'format': 'TXT',
+                'encoding': encoding,
+                'size': len(content)
+            }
+            
+            structure = self._build_document_structure(paragraphs, tables, [])
+            
+            # 生成完整的markdown内容
+            markdown_content = self._clean_markdown(markdown_lines)
+            
+            # 文件信息
+            file_info = {
+                "name": file_path.name,
+                "size": file_path.stat().st_size,
+                "format": "txt",
+                "encoding": encoding
+            }
+            
+            return DocumentContent(
+                paragraphs=paragraphs,
+                tables=tables,
+                images=[],
+                metadata=metadata,
+                structure=structure,
+                markdown_content=markdown_content,
+                file_info=file_info
+            )
+            
+        except Exception as e:
+            logger.error(f"文本文件解析失败: {e}")
+            raise
+    
+    def _parse_xlsx_unified(self, file_path: Path) -> DocumentContent:
+        """统一的XLSX解析方法"""
+        try:
+            if openpyxl is None:
+                raise ImportError("需要安装openpyxl库来解析xlsx文件")
+            
+            workbook = load_workbook(filename=str(file_path), data_only=True)
+            paragraphs = []
+            tables = []
+            images = []
+            markdown_lines = []
+            
+            logger.info(f"XLSX文件包含{len(workbook.sheetnames)}个工作表")
+            
+            # 提取图片
+            try:
+                images = self._extract_xlsx_images_unified(str(file_path))
+                if images:
+                    logger.info(f"从XLSX文件中提取了{len(images)}张图片")
+            except Exception as e:
+                logger.warning(f"XLSX图片提取失败: {str(e)}")
+            
+            # 处理每个工作表
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                
+                # 获取有数据的范围
+                if sheet.max_row == 1 and sheet.max_column == 1:
+                    continue  # 跳过空工作表
+                
+                # 转换为表格格式
+                table_data = []
+                for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row, 
+                                         min_col=1, max_col=sheet.max_column, values_only=True):
+                    if any(cell is not None and str(cell).strip() for cell in row):
+                        table_data.append([str(cell) if cell is not None else "" for cell in row])
+                
+                if table_data:
+                    # 创建表格对象
+                    table_obj = {
+                        'index': len(tables),
+                        'sheet_name': sheet_name,
+                        'data': table_data,
+                        'rows': len(table_data),
+                        'cols': len(table_data[0]) if table_data else 0,
+                        'type': 'table',
+                        'markdown': self._convert_list_to_markdown_table(table_data)
+                    }
+                    tables.append(table_obj)
+                    
+                    # 添加到markdown内容
+                    markdown_lines.append(f"\n**工作表: {sheet_name}**\n")
+                    markdown_lines.extend(table_obj['markdown'])
+                    markdown_lines.append("")
+            
+            # 如果有图片，添加到markdown内容中
+            if images:
+                markdown_lines.append("\n## 图片")
+                for img_info in images:
+                    markdown_lines.append(f"![{img_info['filename']}]({img_info['url']})")
+            
+            # 生成完整的markdown内容
+            markdown_content = self._clean_markdown(markdown_lines)
+            
+            metadata = {
+                'title': file_path.stem,
+                'format': 'XLSX',
+                'sheets': len(workbook.sheetnames),
+                'sheet_names': workbook.sheetnames
+            }
+            
+            structure = self._build_document_structure(paragraphs, tables, images)
+            
+            # 文件信息
+            file_info = {
+                "name": file_path.name,
+                "size": file_path.stat().st_size,
+                "format": "xlsx",
+                "sheets": len(workbook.sheetnames)
+            }
+            
+            return DocumentContent(
+                paragraphs=paragraphs,
+                tables=tables,
+                images=images,
+                metadata=metadata,
+                structure=structure,
+                markdown_content=markdown_content,
+                file_info=file_info
+            )
+            
+        except Exception as e:
+            logger.error(f"XLSX解析失败: {e}")
+            raise
+    
+    def _parse_xls_unified(self, file_path: Path) -> DocumentContent:
+        """统一的XLS解析方法"""
+        try:
+            if xlrd is None:
+                raise ImportError("需要安装xlrd库来解析xls文件")
+            
+            workbook = xlrd.open_workbook(str(file_path))
+            paragraphs = []
+            tables = []
+            images = []
+            markdown_lines = []
+            
+            logger.info(f"XLS文件包含{workbook.nsheets}个工作表")
+            
+            # 处理每个工作表
+            for sheet_idx in range(workbook.nsheets):
+                sheet = workbook.sheet_by_index(sheet_idx)
+                sheet_name = workbook.sheet_names()[sheet_idx]
+                
+                if sheet.nrows == 0:
+                    continue  # 跳过空工作表
+                
+                # 转换为表格格式
+                table_data = []
+                for row_idx in range(sheet.nrows):
+                    row_data = []
+                    for col_idx in range(sheet.ncols):
+                        cell = sheet.cell(row_idx, col_idx)
+                        cell_value = str(cell.value) if cell.value is not None else ""
+                        row_data.append(cell_value)
+                    
+                    if any(cell.strip() for cell in row_data):
+                        table_data.append(row_data)
+                
+                if table_data:
+                    # 创建表格对象
+                    table_obj = {
+                        'index': len(tables),
+                        'sheet_name': sheet_name,
+                        'data': table_data,
+                        'rows': len(table_data),
+                        'cols': len(table_data[0]) if table_data else 0,
+                        'type': 'table',
+                        'markdown': self._convert_list_to_markdown_table(table_data)
+                    }
+                    tables.append(table_obj)
+                    
+                    # 添加到markdown内容
+                    markdown_lines.append(f"\n**工作表: {sheet_name}**\n")
+                    markdown_lines.extend(table_obj['markdown'])
+                    markdown_lines.append("")
+            
+            # 生成完整的markdown内容
+            markdown_content = self._clean_markdown(markdown_lines)
+            
+            metadata = {
+                'title': file_path.stem,
+                'format': 'XLS',
+                'sheets': workbook.nsheets,
+                'sheet_names': workbook.sheet_names()
+            }
+            
+            structure = self._build_document_structure(paragraphs, tables, images)
+            
+            # 文件信息
+            file_info = {
+                "name": file_path.name,
+                "size": file_path.stat().st_size,
+                "format": "xls",
+                "sheets": workbook.nsheets
+            }
+            
+            return DocumentContent(
+                paragraphs=paragraphs,
+                tables=tables,
+                images=images,
+                metadata=metadata,
+                structure=structure,
+                markdown_content=markdown_content,
+                file_info=file_info
+            )
+            
+        except Exception as e:
+            logger.error(f"XLS解析失败: {e}")
+            raise
+    
+    def _parse_pptx_unified(self, file_path: Path) -> DocumentContent:
+        """统一的PPTX解析方法"""
+        try:
+            if Presentation is None:
+                raise ImportError("需要安装python-pptx库来解析pptx文件")
+            
+            prs = Presentation(str(file_path))
+            paragraphs = []
+            tables = []
+            images = []
+            markdown_lines = []
+            
+            logger.info(f"PPTX文件包含{len(prs.slides)}张幻灯片")
+            
+            for slide_idx, slide in enumerate(prs.slides, 1):
+                slide_paragraphs = []
+                slide_text = []
+                
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        text_content = shape.text.strip()
+                        slide_text.append(text_content)
+                        
+                        # 创建段落对象
+                        para_obj = {
+                            'content': text_content,
+                            'index': len(paragraphs),
+                            'type': 'paragraph',
+                            'slide': slide_idx,
+                            'shape_type': 'text'
+                        }
+                        paragraphs.append(para_obj)
+                        slide_paragraphs.append(para_obj)
+                    
+                    # 提取图片
+                    if shape.shape_type == 13:  # PICTURE = 13
+                        try:
+                            image = shape.image
+                            image_bytes = image.blob
+                            image_ext = self._get_image_extension(image_bytes)
+                            image_filename = f"{uuid.uuid4()}.{image_ext}"
+                            image_path = self.image_save_dir / image_filename
+                            
+                            with open(image_path, 'wb') as f:
+                                f.write(image_bytes)
+                            
+                            image_url = f"{self.image_base_url}/static/images/{image_filename}"
+                            image_info = {
+                                "filename": image_filename,
+                                "path": str(image_path),
+                                "url": image_url,
+                                "size": len(image_bytes),
+                                "slide": slide_idx,
+                                "type": "image"
+                            }
+                            images.append(image_info)
+                            
+                            slide_text.append(f"![图片]({image_url})")
+                            
+                        except Exception as e:
+                            logger.warning(f"提取PPT图片失败: {str(e)}")
+                
+                # 添加幻灯片内容到markdown
+                if slide_text:
+                    markdown_lines.append(f"\n## 幻灯片 {slide_idx}\n")
+                    markdown_lines.extend(slide_text)
+                    markdown_lines.append("")
+            
+            # 生成完整的markdown内容
+            markdown_content = self._clean_markdown(markdown_lines)
+            
+            metadata = {
+                'title': file_path.stem,
+                'format': 'PPTX',
+                'slides': len(prs.slides)
+            }
+            
+            structure = self._build_document_structure(paragraphs, tables, images)
+            
+            # 文件信息
+            file_info = {
+                "name": file_path.name,
+                "size": file_path.stat().st_size,
+                "format": "pptx",
+                "slides": len(prs.slides)
+            }
+            
+            return DocumentContent(
+                paragraphs=paragraphs,
+                tables=tables,
+                images=images,
+                metadata=metadata,
+                structure=structure,
+                markdown_content=markdown_content,
+                file_info=file_info
+            )
+            
+        except Exception as e:
+            logger.error(f"PPTX解析失败: {e}")
+            raise
+    
+    # 以下是辅助方法，整合了两个解析器的功能
+    
+    def _process_pdf_text_unified(self, text: str, page_num: int) -> Tuple[List[Dict], List[str]]:
+        """处理PDF文本，返回段落对象和markdown行"""
+        paragraphs = []
+        markdown_lines = []
+        
+        # 按段落分割
+        para_texts = text.split('\n\n')
+        
+        for i, para in enumerate(para_texts):
+            para = para.strip()
+            if not para:
+                continue
+            
+            # 清理多余的换行符
+            para = re.sub(r'\n+', ' ', para)
+            para = re.sub(r'\s+', ' ', para)
+            
+            if len(para) < 10:  # 过滤过短的段落
+                continue
+            
+            # 检测标题
+            is_heading = self._is_heading_pdf(para)
+            
+            # 创建段落对象
+            para_obj = {
+                'content': para,
+                'page': page_num + 1,
+                'index': i,
+                'type': 'heading' if is_heading else 'paragraph',
+                'bbox': []
+            }
+            paragraphs.append(para_obj)
+            
+            # 添加到markdown
+            if is_heading:
+                markdown_lines.append(f"## {para}")
+            else:
+                markdown_lines.append(para)
+            markdown_lines.append("")
+        
+        return paragraphs, markdown_lines
+    
+    def _process_docx_paragraph_unified(self, paragraph, index: int) -> Tuple[Optional[Dict], List[str]]:
+        """处理DOCX段落，返回段落对象和markdown行"""
+        text = paragraph.text.strip()
+        
+        if not text:
+            return None, [""]
+        
+        # 检查段落样式
+        style_name = paragraph.style.name if paragraph.style else ""
+        
+        # 创建段落对象
+        para_obj = {
+            'content': text,
+            'index': index,
+            'type': 'paragraph',
+            'style': style_name,
+            'level': self._get_heading_level(style_name)
+        }
+        
+        markdown_lines = []
+        
+        # 处理标题
+        if style_name.startswith('Heading'):
+            level = self._get_heading_level(style_name)
+            para_obj['type'] = 'heading'
+            markdown_lines.append(f"{'#' * level} {text}")
+            markdown_lines.append("")
+        elif style_name.lower() in ['title', 'subtitle']:
+            para_obj['type'] = 'title'
+            markdown_lines.append(f"# {text}")
+            markdown_lines.append("")
+        else:
+            # 检查段落对齐方式
+            alignment = paragraph.alignment
+            if alignment == WD_PARAGRAPH_ALIGNMENT.CENTER:
+                markdown_lines.append(f"<center>{text}</center>")
+            else:
+                # 处理列表项
+                if re.match(r'^\s*[\d\w]+[.)]\s+', text) or text.strip().startswith(('•', '-', '*')):
+                    if re.match(r'^\s*\d+[.)]\s+', text):
+                        match = re.match(r'^\s*\d+[.)]\s+(.+)', text)
+                        if match:
+                            markdown_lines.append(f"1. {match.group(1)}")
+                    else:
+                        cleaned_text = re.sub(r'^\s*[•\-*]\s+', '', text)
+                        markdown_lines.append(f"- {cleaned_text}")
+                else:
+                    markdown_lines.append(text)
+            
+            markdown_lines.append("")
+        
+        return para_obj, markdown_lines
+    
+    def _extract_docx_table_unified(self, table, index: int) -> Dict:
+        """提取Word表格信息并转换为markdown"""
+        table_data = []
+        
+        for row in table.rows:
+            row_data = []
+            for cell in row.cells:
+                cell_text = cell.text.strip()
+                row_data.append(cell_text)
+            table_data.append(row_data)
+        
+        # 转换为markdown
+        markdown_table = self._convert_list_to_markdown_table(table_data)
+        
+        return {
+            'index': index,
+            'data': table_data,
+            'rows': len(table.rows),
+            'cols': len(table.columns) if table.rows else 0,
+            'type': 'table',
+            'markdown': markdown_table
+        }
+    
+    def _extract_pdf_tables_unified(self, page, page_num: int) -> List[Dict]:
+        """从PDF页面提取表格（简化版）"""
+        # 这里可以集成更专业的表格提取库
+        return []
+    
+    def _extract_pdf_images_unified(self, page, page_num: int) -> List[Dict]:
+        """从PDF页面提取图片"""
+        images_info = []
+        
+        try:
+            image_list = page.get_images()
+            
+            for img_index, img in enumerate(image_list):
+                try:
+                    xref = img[0]
+                    pix = fitz.Pixmap(page.parent, xref)
+                    
+                    # 跳过CMYK图片和太小的图片
+                    if pix.n - pix.alpha >= 4 or pix.width < 50 or pix.height < 50:
+                        pix = None
+                        continue
+                    
+                    # 生成唯一文件名
+                    image_id = str(uuid.uuid4())
+                    image_filename = f"{image_id}.png"
+                    image_path = self.image_save_dir / image_filename
+                    
+                    # 保存图片
+                    pix.save(str(image_path))
+                    
+                    # 验证图片是否有效
+                    if self._validate_image(image_path):
+                        image_url = f"{self.image_base_url}/static/images/{image_filename}"
+                        
+                        images_info.append({
+                            "filename": image_filename,
+                            "path": str(image_path),
+                            "url": image_url,
+                            "page": page_num + 1,
+                            "index": img_index,
+                            "width": pix.width,
+                            "height": pix.height,
+                            "format": "png",
+                            "type": "image"
+                        })
+                    else:
+                        os.remove(image_path)
+                    
+                    pix = None
+                    
+                except Exception as e:
+                    logger.warning(f"处理PDF第{page_num + 1}页图片{img_index}时出错: {str(e)}")
+                    continue
+                    
+        except Exception as e:
+            logger.warning(f"PDF第{page_num + 1}页图片提取失败: {str(e)}")
+        
+        return images_info
+    
+    def _extract_docx_images_unified(self, doc) -> List[Dict]:
+        """从docx文档中提取图片"""
+        images_info = []
+        
+        try:
+            for rel_id, rel in doc.part.rels.items():
+                if "image" in rel.target_ref:
+                    try:
+                        image_data = rel.target_part.blob
+                        
+                        if len(image_data) < 100:
+                            continue
+                        
+                        image_id = str(uuid.uuid4())
+                        image_ext = self._get_image_extension(image_data)
+                        image_filename = f"{image_id}.{image_ext}"
+                        image_path = self.image_save_dir / image_filename
+                        
+                        with open(image_path, 'wb') as f:
+                            f.write(image_data)
+                        
+                        if self._validate_image(image_path):
+                            image_url = f"{self.image_base_url}/static/images/{image_filename}"
+                            
+                            images_info.append({
+                                "filename": image_filename,
+                                "path": str(image_path),
+                                "url": image_url,
+                                "size": len(image_data),
+                                "format": image_ext,
+                                "type": "image"
+                            })
+                        else:
+                            os.remove(image_path)
+                            
+                    except Exception as e:
+                        logger.warning(f"处理DOCX图片{rel_id}时出错: {str(e)}")
+                        continue
+                        
+        except Exception as e:
+            logger.warning(f"DOCX图片提取失败: {str(e)}")
+        
+        return images_info
+    
+    def _extract_xlsx_images_unified(self, file_path: str) -> List[Dict]:
+        """从xlsx文件中提取图片"""
+        images_info = []
+        
+        try:
+            import zipfile
+            
+            with zipfile.ZipFile(file_path, 'r') as zip_file:
+                media_files = [name for name in zip_file.namelist() 
+                              if name.startswith('xl/media/') and 
+                              any(name.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'])]
+                
+                for media_file in media_files:
+                    try:
+                        image_data = zip_file.read(media_file)
+                        
+                        if len(image_data) < 100:
+                            continue
+                        
+                        image_id = str(uuid.uuid4())
+                        original_ext = Path(media_file).suffix.lower().lstrip('.')
+                        image_filename = f"{image_id}.{original_ext}"
+                        image_path = self.image_save_dir / image_filename
+                        
+                        with open(image_path, 'wb') as f:
+                            f.write(image_data)
+                        
+                        if self._validate_image(image_path):
+                            image_url = f"{self.image_base_url}/static/images/{image_filename}"
+                            
+                            images_info.append({
+                                "filename": image_filename,
+                                "path": str(image_path),
+                                "url": image_url,
+                                "size": len(image_data),
+                                "format": original_ext,
+                                "source": media_file,
+                                "type": "image"
+                            })
+                        else:
+                            os.remove(image_path)
+                            
+                    except Exception as e:
+                        logger.warning(f"处理XLSX图片{media_file}时出错: {str(e)}")
+                        
+        except Exception as e:
+            logger.error(f"XLSX图片提取失败: {str(e)}")
+            
+        return images_info
+    
+    def _convert_list_to_markdown_table(self, table_data: List[List[str]]) -> List[str]:
+        """将二维列表转换为markdown表格"""
+        if not table_data:
+            return ["*空表格*"]
+        
+        markdown_table = []
+        
+        try:
+            # 确保所有行有相同的列数
+            max_cols = max(len(row) for row in table_data)
+            normalized_data = []
+            for row in table_data:
+                normalized_row = row + [""] * (max_cols - len(row))
+                cleaned_row = [str(cell).replace('\n', '<br>').replace('|', '\\|') for cell in normalized_row]
+                normalized_data.append(cleaned_row)
+            
+            # 生成表头
+            if normalized_data:
+                headers = normalized_data[0] if len(normalized_data) > 1 else [f"列{i+1}" for i in range(max_cols)]
+                markdown_table.append("| " + " | ".join(headers) + " |")
+                markdown_table.append("| " + " | ".join(["---"] * len(headers)) + " |")
+                
+                # 生成数据行
+                data_rows = normalized_data[1:] if len(normalized_data) > 1 else normalized_data
+                for row in data_rows:
+                    markdown_table.append("| " + " | ".join(row) + " |")
+            
+        except Exception as e:
+            logger.warning(f"表格转换失败: {str(e)}")
+            return ["*表格解析失败*"]
+        
+        return markdown_table
+    
+    # 辅助方法
+    def _validate_image(self, image_path: Path) -> bool:
+        """验证图片是否有效"""
+        try:
+            with Image.open(image_path) as img:
+                img.verify()
+            return True
+        except Exception:
+            return False
+    
+    def _get_image_extension(self, image_data: bytes) -> str:
+        """根据图片数据判断图片格式"""
+        try:
+            image = Image.open(io.BytesIO(image_data))
+            format_name = image.format.lower()
+            if format_name == 'jpeg':
+                return 'jpg'
+            return format_name if format_name else 'png'
+        except Exception:
+            return 'png'
+    
+    def _is_heading_pdf(self, text: str) -> bool:
+        """判断PDF文本是否为标题"""
+        if len(text) > 100:
+            return False
+        
+        # 检测标题模式
+        if (text.isupper() or 
+            re.match(r'^[A-Z][^.!?]*$', text) or
+            re.match(r'^\d+[\.\s]+[A-Z]', text)):
+            return True
+        
+        return False
+    
+    def _get_heading_level(self, style_name: str) -> int:
+        """获取标题级别"""
+        heading_levels = {
+            'Heading 1': 1, 'Title': 1,
+            'Heading 2': 2, 'Subtitle': 2,
+            'Heading 3': 3,
+            'Heading 4': 4,
+            'Heading 5': 5,
+            'Heading 6': 6
+        }
+        return heading_levels.get(style_name, 0)
+    
+    def _clean_markdown(self, markdown_lines: List[str]) -> str:
+        """清理和格式化markdown内容"""
+        content = "\n".join(markdown_lines)
+        content = re.sub(r'\n{3,}', '\n\n', content)
+        lines = [line.rstrip() for line in content.split('\n')]
+        
+        # 移除开头和结尾的空行
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        
+        return '\n'.join(lines)
+    
+    def _extract_pdf_metadata(self, doc) -> Dict:
+        """提取PDF元数据"""
+        metadata = doc.metadata or {}
+        return {
+            'title': metadata.get('title', ''),
+            'author': metadata.get('author', ''),
+            'subject': metadata.get('subject', ''),
+            'creator': metadata.get('creator', ''),
+            'producer': metadata.get('producer', ''),
+            'creation_date': metadata.get('creationDate', ''),
+            'modification_date': metadata.get('modDate', ''),
+            'page_count': len(doc),
+            'format': 'PDF'
+        }
+    
+    def _extract_docx_metadata(self, doc) -> Dict:
+        """提取Word文档元数据"""
+        core_props = doc.core_properties
+        return {
+            'title': core_props.title or '',
+            'author': core_props.author or '',
+            'subject': core_props.subject or '',
+            'keywords': core_props.keywords or '',
+            'comments': core_props.comments or '',
+            'created': str(core_props.created) if core_props.created else '',
+            'modified': str(core_props.modified) if core_props.modified else '',
+            'format': 'DOCX'
+        }
+    
+    def _postprocess_paragraphs(self, paragraphs: List[Dict]) -> List[Dict]:
+        """后处理段落列表"""
+        processed = []
+        
+        for para in paragraphs:
+            content = para['content']
+            
+            # 清理内容
+            content = self._clean_paragraph_content(content)
+            
+            # 过滤空内容和过短的段落
+            if not content.strip() or len(content.strip()) < 10:
+                continue
+            
+            para['content'] = content
+            processed.append(para)
+        
+        return processed
+    
+    def _clean_paragraph_content(self, content: str) -> str:
+        """清理段落内容"""
+        # 移除多余的空白字符
+        content = re.sub(r'\s+', ' ', content)
+        
+        # 移除页眉页脚常见模式
+        patterns_to_remove = [
+            r'^第\s*\d+\s*页.*$',
+            r'^\d+\s*$',
+            r'^[-=_]{3,}$',
+        ]
+        
+        for pattern in patterns_to_remove:
+            if re.match(pattern, content.strip()):
+                return ''
+        
+        return content.strip()
+    
+    def _build_document_structure(
+        self, 
+        paragraphs: List[Dict], 
+        tables: List[Dict], 
+        images: List[Dict]
+    ) -> Dict:
+        """构建文档结构信息"""
+        structure = {
+            'paragraph_count': len(paragraphs),
+            'table_count': len(tables),
+            'image_count': len(images),
+            'headings': [],
+            'sections': []
+        }
+        
+        # 提取标题信息
+        current_section = {'title': '', 'level': 0, 'start_index': 0, 'paragraphs': []}
+        
+        for i, para in enumerate(paragraphs):
+            if para.get('type') == 'heading':
+                if current_section['paragraphs']:
+                    structure['sections'].append(current_section)
+                
+                level = para.get('level', 1)
+                current_section = {
+                    'title': para['content'],
+                    'level': level,
+                    'start_index': i,
+                    'paragraphs': []
+                }
+                
+                structure['headings'].append({
+                    'text': para['content'],
+                    'level': level,
+                    'index': i
+                })
+            else:
+                current_section['paragraphs'].append(i)
+        
+        # 保存最后一个章节
+        if current_section['paragraphs']:
+            structure['sections'].append(current_section)
+        
+        return structure
+    
+    def _detect_and_parse_table_from_text(self, text: str) -> Optional[List[List[str]]]:
+        """
+        从文本中检测和解析表格内容
+        
+        支持的格式：
+        1. [表格内容] ... | ... | ...
+        2. 用 | 分隔的表格行
+        3. 标准markdown表格
+        
+        Args:
+            text: 输入文本
+            
+        Returns:
+            表格数据（二维列表）或None
+        """
+        try:
+            # 格式1: [表格内容] ... | ... | ...
+            if text.startswith('[表格内容]'):
+                # 移除[表格内容]标记
+                table_text = text.replace('[表格内容]', '').strip()
+                return self._parse_pipe_separated_table(table_text)
+            
+            # 格式2: 检查是否包含多个 | 分隔符（可能是表格）
+            if text.count('|') >= 3:  # 至少3个分隔符才可能是表格
+                return self._parse_pipe_separated_table(text)
+            
+            # 格式3: 标准markdown表格
+            if self._is_markdown_table(text):
+                return self._parse_markdown_table(text)
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"表格解析失败: {e}")
+            return None
+    
+    def _parse_pipe_separated_table(self, text: str) -> Optional[List[List[str]]]:
+        """解析用管道符分隔的表格"""
+        try:
+            # 按 | 分割
+            parts = [part.strip() for part in text.split('|') if part.strip()]
+            
+            if len(parts) < 3:  # 至少需要3个部分才能构成表格
+                return None
+            
+            # 尝试识别表格结构
+            # 检查是否有编号模式（如 1, 2, 3...）
+            table_data = []
+            current_row = []
+            
+            # 先尝试解析为三列表格（编号、检查项、描述）
+            if len(parts) >= 3:
+                # 检查第一部分是否包含表头信息
+                first_part = parts[0]
+                if any(keyword in first_part for keyword in ['编号', '检查项', '描述', '项目', '内容']):
+                    # 提取表头
+                    header_parts = first_part.split()
+                    if len(header_parts) >= 2:
+                        table_data.append(header_parts[:3] if len(header_parts) >= 3 else header_parts + ['描述'])
+                        parts = parts[1:]  # 移除已处理的表头部分
+                
+                # 如果没有表头，添加默认表头
+                if not table_data:
+                    table_data.append(['编号', '检查项', '描述'])
+                
+                # 解析数据行 - 改进的逻辑
+                i = 0
+                while i < len(parts):
+                    part = parts[i].strip()
+                    
+                    # 检查是否为编号开头（更宽松的匹配）
+                    number_match = re.match(r'^(\d+)\s*(.+)', part)
+                    if number_match:
+                        # 如果当前行有数据，先保存
+                        if current_row:
+                            table_data.append(current_row)
+                        
+                        # 开始新行
+                        number = number_match.group(1)
+                        question = number_match.group(2).strip()
+                        
+                        # 获取描述（下一个部分）
+                        description = ""
+                        if i + 1 < len(parts):
+                            description = parts[i + 1].strip()
+                            i += 1
+                        
+                        current_row = [number, question, description]
+                    else:
+                        # 如果不是编号开头，可能是描述的延续或单独的内容
+                        if current_row and len(current_row) >= 3:
+                            # 延续描述
+                            current_row[2] += " " + part
+                        elif current_row:
+                            # 添加到当前行
+                            current_row.append(part)
+                        else:
+                            # 开始新的不规则行
+                            current_row = [str(len(table_data)), part, ""]
+                    
+                    i += 1
+                
+                # 保存最后一行
+                if current_row:
+                    table_data.append(current_row)
+            
+            # 如果没有识别出合理的表格结构，尝试简单的三列分割
+            if not table_data or len(table_data) < 2:
+                table_data = []
+                # 添加默认表头
+                table_data.append(['编号', '检查项', '描述'])
+                
+                # 按3个一组分割
+                for i in range(0, len(parts), 3):
+                    row = parts[i:i+3]
+                    if len(row) >= 2:  # 至少有编号和检查项
+                        # 补齐到3列
+                        while len(row) < 3:
+                            row.append('')
+                        table_data.append(row)
+            
+            # 验证表格数据
+            if len(table_data) >= 2 and all(len(row) >= 2 for row in table_data):
+                return table_data
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"管道分隔表格解析失败: {e}")
+            return None
+    
+    def _is_markdown_table(self, text: str) -> bool:
+        """检查是否为markdown表格格式"""
+        lines = text.strip().split('\n')
+        if len(lines) < 2:
+            return False
+        
+        # 检查是否有分隔行（包含 --- 的行）
+        has_separator = any('---' in line for line in lines)
+        # 检查是否有管道符
+        has_pipes = any('|' in line for line in lines)
+        
+        return has_separator and has_pipes
+    
+    def _parse_markdown_table(self, text: str) -> Optional[List[List[str]]]:
+        """解析markdown格式的表格"""
+        try:
+            lines = [line.strip() for line in text.strip().split('\n') if line.strip()]
+            table_data = []
+            
+            for line in lines:
+                if '---' in line:  # 跳过分隔行
+                    continue
+                
+                if '|' in line:
+                    # 移除首尾的 |，然后分割
+                    cells = [cell.strip() for cell in line.strip('|').split('|')]
+                    if cells and any(cell for cell in cells):  # 确保不是空行
+                        table_data.append(cells)
+            
+            return table_data if len(table_data) >= 2 else None
+            
+        except Exception as e:
+            logger.warning(f"Markdown表格解析失败: {e}")
+            return None
+
+
+# 向后兼容的别名
+DocumentParser = UnifiedDocumentParser

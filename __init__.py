@@ -11,7 +11,7 @@ AntSK 语义文本切片服务
 """
 
 from src.antsk_filechunk.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk, EnhancedSemanticChunker
-from src.antsk_filechunk.document_parser import DocumentParser, DocumentContent
+from src.antsk_filechunk.unified_document_parser import UnifiedDocumentParser as DocumentParser, DocumentContent
 from src.antsk_filechunk.semantic_analyzer import SemanticAnalyzer
 from src.antsk_filechunk.chunk_optimizer import ChunkOptimizer
 from src.antsk_filechunk.quality_evaluator import QualityEvaluator
