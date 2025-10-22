@@ -21,6 +21,9 @@ from src.antsk_filechunk.enhanced_semantic_chunker import SemanticChunker, Chunk
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 从环境变量获取配置
+IMAGE_BASE_URL = os.getenv('IMAGE_BASE_URL', None)  # 默认为None,将从请求动态获取
+
 def safe_convert_numeric(value):
     """安全转换数值类型，确保可以序列化"""
     if isinstance(value, (np.float32, np.float64)):
@@ -133,14 +136,23 @@ async def health_check():
 
 @app.post("/api/process-file", response_model=ProcessResponse)
 async def process_file(
-    file: UploadFile = File(..., description="上传的文件（支持PDF、Word格式）"),
-    config: Optional[str] = Form(None, description="切片配置JSON字符串（可选）")
+    request: Request,
+    file: UploadFile = File(..., description="上传的文件(支持PDF、Word格式)"),
+    config: Optional[str] = Form(None, description="切片配置JSON字符串(可选)")
 ):
     """
-    处理上传的文件，进行语义切片
+    处理上传的文件,进行语义切片
     """
     import time
     start_time = time.time()
+    
+    # 获取图片基础URL:优先使用环境变量,否则从请求动态构建
+    if IMAGE_BASE_URL:
+        image_base_url = IMAGE_BASE_URL
+    else:
+        host = request.headers.get('host', 'localhost:8000')
+        scheme = request.url.scheme  # http 或 https
+        image_base_url = f"{scheme}://{host}"
     
     try:
         # 检查文件类型
@@ -177,6 +189,9 @@ async def process_file(
         
         # 更新切片器配置
         chunker.config = chunk_config
+        
+        # 更新图片URL配置
+        chunker.parser.image_base_url = image_base_url
         
         # 保存临时文件
         temp_dir = Path("temp")

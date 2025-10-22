@@ -363,6 +363,12 @@ docker-compose up -d
 
 #### 方式二：直接使用 Docker
 
+
+```bash
+docker-compose up -d --build
+```
+
+
 ```bash
 # 构建镜像
 docker build -t antsk-filechunk:latest .
