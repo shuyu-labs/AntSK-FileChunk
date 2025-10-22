@@ -23,7 +23,7 @@ services:
       - LOG_LEVEL=info
       - HOST=0.0.0.0
       - PORT=8000
-      - IMAGE_BASE_URL=https://filechunk.antsk.cn/
+      - IMAGE_BASE_URL=https://filechunk.antsk.cn
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
