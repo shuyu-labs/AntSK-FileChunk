@@ -191,7 +191,8 @@ async def process_file(
         chunker.config = chunk_config
         
         # 更新图片URL配置
-        chunker.parser.image_base_url = image_base_url
+        chunker.image_base_url = image_base_url
+        chunker.document_parser.image_base_url = image_base_url
         
         # 保存临时文件
         temp_dir = Path("temp")
