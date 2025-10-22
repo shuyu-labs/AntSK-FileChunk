@@ -33,25 +33,25 @@ services:
     networks:
       - antsk-network
 
-  # 可选：添加 Nginx 反向代理
-  nginx:
-    image: nginx:alpine
-    container_name: antsk-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      # SSL 证书目录（如果需要 HTTPS）
-      # - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - antsk-filechunk
-    restart: unless-stopped
-    networks:
-      - antsk-network
-    profiles:
-      - with-nginx
+  # # 可选：添加 Nginx 反向代理
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: antsk-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/conf.d:/etc/nginx/conf.d:ro
+  #     # SSL 证书目录（如果需要 HTTPS）
+  #     # - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - antsk-filechunk
+  #   restart: unless-stopped
+  #   networks:
+  #     - antsk-network
+  #   profiles:
+  #     - with-nginx
 
 networks:
   antsk-network:
