@@ -257,11 +257,14 @@ class QualityEvaluator:
             如果省略号在对话中返回True，否则返回False
         """
         # 检查内容末尾是否是以引号+省略号结尾
-        # 常见模式: "..."、'...'、"……"、'……'
+        # 常见模式: 
+        #   - 完整闭合: "..."、'...'、"……"、'……'
+        #   - 省略号后跟引号: ..."、...'、……"、……'
         dialogue_endings = [
+            # Complete quote with ellipsis inside
             '"..."', "'...'", '"……"', "'……'",
+            # Ellipsis followed by closing quote
             '..."', "...'", '……"', "……'",
-            '"...', "'...", '"……', "'……"
         ]
         return any(content.endswith(ending) for ending in dialogue_endings)
     
