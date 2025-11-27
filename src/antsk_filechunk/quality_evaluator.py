@@ -223,11 +223,50 @@ class QualityEvaluator:
             score -= 0.2
         
         # 检查是否包含明显的截断标志
-        truncation_indicators = ['...', '……', '(续)', '(未完)', '详见']
-        if any(indicator in content for indicator in truncation_indicators):
+        # 只有当这些标志出现在内容末尾时才扣分（表示实际的截断）
+        # 而不是出现在内容中间（可能是正常的省略号或引用）
+        content_stripped = content.rstrip()
+        
+        # 强截断指示符 - 只在末尾检查，且需要较高的惩罚
+        strong_truncation_indicators = ['(续)', '(未完)', '（续）', '（未完）']
+        if any(content_stripped.endswith(indicator) for indicator in strong_truncation_indicators):
             score -= 0.4
         
+        # 弱截断指示符 - 在末尾检查，使用较低的惩罚
+        # '...' 和 '……' 只有在作为内容的结尾时才可能表示截断
+        weak_truncation_indicators = ['...', '……']
+        if any(content_stripped.endswith(indicator) for indicator in weak_truncation_indicators):
+            # 检查是否可能是对话中的省略号（如果在引号内则不扣分）
+            if not self._is_ellipsis_in_dialogue(content_stripped):
+                score -= 0.2
+        
+        # '详见' 作为引用不应该被惩罚，只有在末尾且没有具体说明时才扣分
+        if content_stripped.endswith('详见'):
+            score -= 0.2
+        
         return max(0.1, score)
+    
+    def _is_ellipsis_in_dialogue(self, content: str) -> bool:
+        """
+        检查省略号是否出现在对话引号内
+        
+        Args:
+            content: 文本内容
+            
+        Returns:
+            如果省略号在对话中返回True，否则返回False
+        """
+        # 检查内容末尾是否是以引号+省略号结尾
+        # 常见模式: 
+        #   - 完整闭合: "..."、'...'、"……"、'……'
+        #   - 省略号后跟引号: ..."、...'、……"、……'
+        dialogue_endings = [
+            # Complete quote with ellipsis inside
+            '"..."', "'...'", '"……"', "'……'",
+            # Ellipsis followed by closing quote
+            '..."', "...'", '……"', "……'",
+        ]
+        return any(content.endswith(ending) for ending in dialogue_endings)
     
     def _evaluate_length_balance(self, chunks: List) -> float:
         """
