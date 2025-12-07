@@ -418,9 +418,14 @@ class UnifiedDocumentParser:
                 # 转换为表格格式
                 table_data = []
                 for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row, 
-                                         min_col=1, max_col=sheet.max_column, values_only=True):
-                    if any(cell is not None and str(cell).strip() for cell in row):
-                        table_data.append([str(cell) if cell is not None else "" for cell in row])
+                                         min_col=1, max_col=sheet.max_column):
+                    if any(cell.value is not None and str(cell.value).strip() for cell in row):
+                        # 处理每个单元格，正确处理日期类型
+                        row_data = []
+                        for cell in row:
+                            cell_value = self._format_excel_cell_value(cell)
+                            row_data.append(cell_value)
+                        table_data.append(row_data)
                 
                 if table_data:
                     # 创建表格对象
@@ -480,13 +485,120 @@ class UnifiedDocumentParser:
             logger.error(f"XLSX解析失败: {e}")
             raise
     
+    def _format_xls_cell_value(self, cell, workbook) -> str:
+        """
+        格式化XLS单元格的值，正确处理日期、时间等特殊类型
+        
+        Args:
+            cell: xlrd的Cell对象
+            workbook: xlrd的Workbook对象
+            
+        Returns:
+            格式化后的字符串值
+        """
+        import datetime
+        from xlrd import xldate_as_datetime, XL_CELL_DATE
+        
+        if cell.value is None or (isinstance(cell.value, str) and not cell.value.strip()):
+            return ""
+        
+        # 检查是否为日期类型
+        if cell.ctype == XL_CELL_DATE:
+            try:
+                # 将Excel日期序列号转换为datetime对象
+                date_value = xldate_as_datetime(cell.value, workbook.datemode)
+                
+                # 判断是否只有日期部分
+                if date_value.hour == 0 and date_value.minute == 0 and date_value.second == 0:
+                    return date_value.strftime("%Y-%m-%d")
+                else:
+                    return date_value.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception as e:
+                logger.warning(f"日期转换失败: {e}, 原始值: {cell.value}")
+                return str(cell.value)
+        
+        # 数字类型
+        if isinstance(cell.value, float):
+            # 如果是整数，显示为整数
+            if cell.value.is_integer():
+                return str(int(cell.value))
+            else:
+                return str(cell.value)
+        
+        # 其他类型直接转换为字符串
+        return str(cell.value).strip()
+    
+    def _format_excel_cell_value(self, cell) -> str:
+        """
+        格式化Excel单元格的值，正确处理日期、时间等特殊类型
+        
+        Args:
+            cell: openpyxl的Cell对象
+            
+        Returns:
+            格式化后的字符串值
+        """
+        import datetime
+        
+        if cell.value is None:
+            return ""
+        
+        # 检查是否为日期或时间类型
+        if isinstance(cell.value, (datetime.datetime, datetime.date, datetime.time)):
+            if isinstance(cell.value, datetime.datetime):
+                # 日期时间类型 - 如果时间部分为00:00:00，只显示日期
+                if cell.value.hour == 0 and cell.value.minute == 0 and cell.value.second == 0:
+                    return cell.value.strftime("%Y-%m-%d")
+                else:
+                    return cell.value.strftime("%Y-%m-%d %H:%M:%S")
+            elif isinstance(cell.value, datetime.date):
+                # 日期类型
+                return cell.value.strftime("%Y-%m-%d")
+            elif isinstance(cell.value, datetime.time):
+                # 时间类型
+                return cell.value.strftime("%H:%M:%S")
+        
+        # 数字类型 - 检查是否应该是日期（通过number_format判断）
+        if isinstance(cell.value, (int, float)):
+            # 检查单元格的数字格式
+            if cell.number_format:
+                # 常见的日期格式代码
+                date_formats = ['yyyy', 'yy', 'mm', 'dd', 'm/d', 'd/m', 'h:mm', 'h:mm:ss']
+                number_format_lower = cell.number_format.lower()
+                
+                # 如果格式中包含日期相关的标识
+                if any(fmt in number_format_lower for fmt in date_formats):
+                    try:
+                        # 尝试将数字转换为日期
+                        from openpyxl.utils.datetime import from_excel
+                        date_value = from_excel(cell.value)
+                        if isinstance(date_value, datetime.datetime):
+                            return date_value.strftime("%Y-%m-%d %H:%M:%S")
+                        elif isinstance(date_value, datetime.date):
+                            return date_value.strftime("%Y-%m-%d")
+                    except Exception as e:
+                        logger.debug(f"日期转换失败: {e}")
+            
+            # 如果是整数且小数部分为0，显示为整数
+            if isinstance(cell.value, float) and cell.value.is_integer():
+                return str(int(cell.value))
+        
+        # 其他类型直接转换为字符串
+        return str(cell.value).strip()
+    
     def _parse_xls_unified(self, file_path: Path) -> DocumentContent:
         """统一的XLS解析方法"""
         try:
             if xlrd is None:
                 raise ImportError("需要安装xlrd库来解析xls文件")
             
-            workbook = xlrd.open_workbook(str(file_path))
+            # 尝试打开带格式信息的工作簿，如果失败则不带格式信息打开
+            try:
+                workbook = xlrd.open_workbook(str(file_path), formatting_info=True)
+            except Exception:
+                logger.warning("无法获取格式信息，使用基础模式打开XLS文件")
+                workbook = xlrd.open_workbook(str(file_path))
+            
             paragraphs = []
             tables = []
             images = []
@@ -508,7 +620,7 @@ class UnifiedDocumentParser:
                     row_data = []
                     for col_idx in range(sheet.ncols):
                         cell = sheet.cell(row_idx, col_idx)
-                        cell_value = str(cell.value) if cell.value is not None else ""
+                        cell_value = self._format_xls_cell_value(cell, workbook)
                         row_data.append(cell_value)
                     
                     if any(cell.strip() for cell in row_data):
