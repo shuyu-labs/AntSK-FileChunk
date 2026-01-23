@@ -515,8 +515,8 @@ mypy src/
 
 ## 📞 联系我们
 
-- **项目主页**：https://github.com/antsk/AntSK-FileChunk
-- **问题反馈**：https://github.com/antsk/AntSK-FileChunk/issues
+- **项目主页**：https://github.com/xuzeyu91/AntSK-FileChunk
+- **问题反馈**：https://github.com/xuzeyu91/AntSK-FileChunk/issues
 - **邮箱**：antskpro@qq.com
 
 ## 🙏 致谢
