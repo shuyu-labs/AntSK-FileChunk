@@ -2,7 +2,7 @@
 # 支持不同的 Debian/Ubuntu 版本
 
 # 第一阶段：依赖安装
-FROM python:3.9-slim as base
+FROM python:3.11-slim as base
 
 # 设置环境变量
 ENV PYTHONPATH=/app
