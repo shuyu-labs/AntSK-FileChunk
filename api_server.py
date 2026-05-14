@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 TEMP_DIR = Path("temp")
 STATIC_DIR = Path("static")
 TEMPLATES_DIR = Path("templates")
-SUPPORTED_FORMATS = [".pdf", ".docx", ".txt", ".xlsx", ".xls", ".pptx"]
+SUPPORTED_FORMATS = [".pdf", ".docx", ".doc", ".txt", ".xlsx", ".xls", ".pptx"]
 IMAGE_BASE_URL = os.getenv("IMAGE_BASE_URL")
 
 for directory in (TEMP_DIR, STATIC_DIR, TEMPLATES_DIR):

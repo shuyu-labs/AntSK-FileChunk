@@ -4,13 +4,18 @@
 支持PDF、Word、Excel、PowerPoint文档的解析，包括表格和图片的提取
 """
 
-import os
-import uuid
+import json
 import logging
+import mimetypes
+import os
 import re
+import uuid
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 from dataclasses import dataclass
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 import docx
 from docx.shared import Inches
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
@@ -64,9 +69,19 @@ class UnifiedDocumentParser:
         self.image_base_url = image_base_url
         self.image_save_dir = Path(image_save_dir)
         self.image_save_dir.mkdir(parents=True, exist_ok=True)
+        self.remote_parse_url = os.getenv("FILEEXT_API_URL", "https://fileext.antsk.cn/api/parse")
+        self.remote_parse_api_key = os.getenv("FILEEXT_API_KEY", "").strip()
+        self.remote_parse_timeout = int(os.getenv("FILEEXT_API_TIMEOUT", "120"))
+        self.remote_parse_enabled = os.getenv("FILEEXT_API_ENABLED", "true").strip().lower() not in {
+            "0",
+            "false",
+            "off",
+            "no",
+        }
         
         # 支持的文件格式（仅跨平台格式）
-        self.supported_formats = {'.pdf', '.docx', '.txt', '.xlsx', '.xls', '.pptx'}
+        self.supported_formats = {'.pdf', '.docx', '.doc', '.txt', '.xlsx', '.xls', '.pptx'}
+        self.remote_supported_formats = {'.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx'}
         
         # 支持的图片格式
         self.supported_image_formats = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
@@ -94,11 +109,21 @@ class UnifiedDocumentParser:
         logger.info(f"开始解析文件: {file_path} (格式: {file_extension})")
         
         try:
+            if self.remote_parse_enabled and file_extension in self.remote_supported_formats:
+                try:
+                    logger.info("尝试使用远程 Markdown 转换服务: %s", self.remote_parse_url)
+                    return self._parse_via_remote_api(file_path, file_extension)
+                except Exception as remote_error:
+                    logger.warning("远程 Markdown 转换失败，回退到本地解析: %s", remote_error)
+                    if file_extension == '.doc':
+                        raise
             # 根据文件类型调用相应的解析方法
             if file_extension == '.pdf':
                 return self._parse_pdf_unified(file_path)
             elif file_extension == '.docx':
                 return self._parse_docx_unified(file_path)
+            elif file_extension == '.doc':
+                raise ValueError("当前环境未启用 .doc 本地解析，请配置远程 Markdown 转换服务")
             elif file_extension == '.txt':
                 return self._parse_txt_unified(file_path)
             elif file_extension == '.xlsx':
@@ -114,6 +139,258 @@ class UnifiedDocumentParser:
             logger.error(f"文件解析失败: {e}")
             raise
     
+    def _parse_via_remote_api(self, file_path: Path, file_extension: str) -> DocumentContent:
+        """Call the remote AntSK parser and adapt the markdown response."""
+        response_payload = self._call_remote_markdown_api(file_path)
+
+        if not response_payload.get("success", False):
+            raise RuntimeError(response_payload.get("error") or "远程文档解析返回失败")
+
+        markdown = (response_payload.get("markdown") or "").strip()
+        if not markdown:
+            raise RuntimeError("远程文档解析成功，但未返回 markdown 内容")
+
+        images = self._normalize_remote_images(response_payload.get("images") or [])
+        document_content = self._build_document_content_from_markdown(
+            markdown=markdown,
+            file_path=file_path,
+            file_extension=file_extension,
+            remote_images=images,
+        )
+        document_content.metadata.update(
+            {
+                "parser_source": "remote_api",
+                "remote_file_type": response_payload.get("file_type", file_extension.lstrip(".")),
+                "remote_images_count": response_payload.get("images_count", len(images)),
+            }
+        )
+        return document_content
+
+    def _call_remote_markdown_api(self, file_path: Path) -> Dict:
+        """Upload a document to the remote parsing service."""
+        boundary = f"----AntSKBoundary{uuid.uuid4().hex}"
+        content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+
+        with file_path.open("rb") as input_file:
+            file_bytes = input_file.read()
+
+        body = bytearray()
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(
+            (
+                f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'
+                f"Content-Type: {content_type}\r\n\r\n"
+            ).encode("utf-8")
+        )
+        body.extend(file_bytes)
+        body.extend(f"\r\n--{boundary}--\r\n".encode("utf-8"))
+
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        }
+        if self.remote_parse_api_key:
+            headers["X-API-KEY"] = self.remote_parse_api_key
+
+        request = Request(
+            self.remote_parse_url,
+            data=bytes(body),
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urlopen(request, timeout=self.remote_parse_timeout) as response:
+                charset = response.headers.get_content_charset() or "utf-8"
+                payload = response.read().decode(charset, errors="replace")
+        except HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"远程文档解析 HTTP {exc.code}: {error_body}") from exc
+        except URLError as exc:
+            raise RuntimeError(f"远程文档解析连接失败: {exc}") from exc
+
+        try:
+            return json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("远程文档解析返回了无法解析的 JSON") from exc
+
+    def _normalize_remote_images(self, remote_images: List[Union[Dict, str]]) -> List[Dict]:
+        """Normalize image metadata returned by the remote service."""
+        normalized_images = []
+
+        for index, image_item in enumerate(remote_images):
+            if isinstance(image_item, dict):
+                image_url = (
+                    image_item.get("url")
+                    or image_item.get("image_url")
+                    or image_item.get("src")
+                    or image_item.get("path")
+                    or ""
+                )
+                filename = image_item.get("filename") or self._infer_image_filename(image_url, index)
+                normalized_images.append({**image_item, "url": image_url, "filename": filename})
+            elif isinstance(image_item, str):
+                normalized_images.append(
+                    {
+                        "url": image_item,
+                        "filename": self._infer_image_filename(image_item, index),
+                    }
+                )
+
+        return normalized_images
+
+    def _build_document_content_from_markdown(
+        self,
+        markdown: str,
+        file_path: Path,
+        file_extension: str,
+        remote_images: Optional[List[Dict]] = None,
+    ) -> DocumentContent:
+        """Convert remote markdown into the local DocumentContent shape."""
+        markdown_content = self._clean_markdown(markdown.splitlines())
+        paragraphs = self._extract_paragraphs_from_markdown(markdown_content)
+        tables = self._extract_tables_from_markdown(markdown_content)
+        images = self._merge_markdown_images(markdown_content, remote_images or [])
+
+        paragraphs = self._postprocess_paragraphs(paragraphs)
+        structure = self._build_document_structure(paragraphs, tables, images)
+
+        file_info = {
+            "name": file_path.name,
+            "size": file_path.stat().st_size,
+            "format": file_extension.lstrip("."),
+            "source": "remote_api",
+        }
+        metadata = {
+            "title": file_path.stem,
+            "format": file_extension.lstrip(".").upper(),
+            "parser": "fileext.antsk.cn",
+        }
+
+        return DocumentContent(
+            paragraphs=paragraphs,
+            tables=tables,
+            images=images,
+            metadata=metadata,
+            structure=structure,
+            markdown_content=markdown_content,
+            file_info=file_info,
+        )
+
+    def _extract_paragraphs_from_markdown(self, markdown_content: str) -> List[Dict]:
+        """Extract headings and paragraph blocks from markdown."""
+        paragraphs = []
+        block_index = 0
+
+        for block in re.split(r"\n\s*\n", markdown_content):
+            block = block.strip()
+            if not block:
+                continue
+
+            if self._is_markdown_table(block):
+                continue
+
+            text_lines = []
+            for raw_line in block.splitlines():
+                line = raw_line.strip()
+                if not line or re.match(r"^!\[[^\]]*\]\([^)]+\)$", line):
+                    continue
+                text_lines.append(line)
+
+            if not text_lines:
+                continue
+
+            if len(text_lines) == 1:
+                heading_match = re.match(r"^(#{1,6})\s+(.*)$", text_lines[0])
+                if heading_match:
+                    paragraphs.append(
+                        {
+                            "content": heading_match.group(2).strip(),
+                            "index": len(paragraphs),
+                            "type": "heading",
+                            "level": len(heading_match.group(1)),
+                            "block_index": block_index,
+                        }
+                    )
+                    block_index += 1
+                    continue
+
+            paragraphs.append(
+                {
+                    "content": "\n".join(text_lines),
+                    "index": len(paragraphs),
+                    "type": "paragraph",
+                    "block_index": block_index,
+                }
+            )
+            block_index += 1
+
+        return paragraphs
+
+    def _extract_tables_from_markdown(self, markdown_content: str) -> List[Dict]:
+        """Extract markdown tables from markdown blocks."""
+        tables = []
+
+        for block in re.split(r"\n\s*\n", markdown_content):
+            block = block.strip()
+            if not block or not self._is_markdown_table(block):
+                continue
+
+            table_data = self._parse_markdown_table(block)
+            if not table_data:
+                continue
+
+            markdown_lines = [line.rstrip() for line in block.splitlines() if line.strip()]
+            tables.append(
+                {
+                    "index": len(tables),
+                    "data": table_data,
+                    "rows": len(table_data),
+                    "cols": len(table_data[0]) if table_data else 0,
+                    "type": "table",
+                    "markdown": markdown_lines,
+                }
+            )
+
+        return tables
+
+    def _merge_markdown_images(self, markdown_content: str, remote_images: List[Dict]) -> List[Dict]:
+        """Merge markdown image references with remote image metadata."""
+        image_pattern = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+        merged_images = []
+        seen_urls = set()
+
+        for index, match in enumerate(image_pattern.finditer(markdown_content)):
+            alt_text = match.group(1).strip()
+            image_url = match.group(2).strip()
+            seen_urls.add(image_url)
+            merged_images.append(
+                {
+                    "url": image_url,
+                    "filename": alt_text or self._infer_image_filename(image_url, index),
+                }
+            )
+
+        for index, remote_image in enumerate(remote_images):
+            image_url = remote_image.get("url", "").strip()
+            if not image_url or image_url in seen_urls:
+                continue
+
+            merged_images.append(
+                {
+                    **remote_image,
+                    "filename": remote_image.get("filename") or self._infer_image_filename(image_url, index),
+                }
+            )
+
+        return merged_images
+
+    def _infer_image_filename(self, image_url: str, index: int) -> str:
+        """Infer a reasonable image filename from the remote URL."""
+        parsed = urlparse(image_url)
+        name = Path(parsed.path).name
+        return name or f"image_{index + 1}.png"
+
     def _parse_pdf_unified(self, file_path: Path) -> DocumentContent:
         """统一的PDF解析方法"""
         try:
@@ -1233,6 +1510,12 @@ class UnifiedDocumentParser:
             # 清理内容
             content = self._clean_paragraph_content(content)
             
+            # 标题即使较短也需要保留，避免破坏文档结构
+            if para.get('type') == 'heading' and content.strip():
+                para['content'] = content
+                processed.append(para)
+                continue
+
             # 过滤空内容和过短的段落
             if not content.strip() or len(content.strip()) < 10:
                 continue
