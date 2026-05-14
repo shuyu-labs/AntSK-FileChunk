@@ -1,69 +1,68 @@
 """
-FastAPI应用程序 - AntSK文件切片服务API
+FastAPI application for the AntSK semantic chunking service.
 """
 
-import os
 import json
 import logging
+import os
+import time
+import uuid
 from pathlib import Path
-from typing import List, Dict, Optional, Union
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
-import uvicorn
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
+import uvicorn
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-from src.antsk_filechunk.enhanced_semantic_chunker import SemanticChunker, ChunkConfig, TextChunk
+from src.antsk_filechunk.enhanced_semantic_chunker import (
+    ChunkConfig,
+    EnhancedSemanticChunker,
+)
+from src.antsk_filechunk.semantic_analyzer import SemanticAnalyzer
 
-# 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 从环境变量获取配置
-IMAGE_BASE_URL = os.getenv('IMAGE_BASE_URL', None)  # 默认为None,将从请求动态获取
+TEMP_DIR = Path("temp")
+STATIC_DIR = Path("static")
+TEMPLATES_DIR = Path("templates")
+SUPPORTED_FORMATS = [".pdf", ".docx", ".txt", ".xlsx", ".xls", ".pptx"]
+IMAGE_BASE_URL = os.getenv("IMAGE_BASE_URL")
+
+for directory in (TEMP_DIR, STATIC_DIR, TEMPLATES_DIR):
+    directory.mkdir(exist_ok=True)
+
+app = FastAPI(
+    title="AntSK文件切片服务",
+    description="基于语义理解的智能文本切片 API 服务",
+    version="1.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+service_chunker: Optional[EnhancedSemanticChunker] = None
+
 
 def safe_convert_numeric(value):
-    """安全转换数值类型，确保可以序列化"""
+    """Convert numpy values so they can be serialized by FastAPI."""
     if isinstance(value, (np.float32, np.float64)):
         return float(value)
-    elif isinstance(value, (np.int32, np.int64)):
+    if isinstance(value, (np.int32, np.int64)):
         return int(value)
-    elif isinstance(value, np.ndarray):
+    if isinstance(value, np.ndarray):
         return value.tolist()
-    elif isinstance(value, dict):
-        # 递归处理字典中的值
-        return {k: safe_convert_numeric(v) for k, v in value.items()}
-    elif isinstance(value, list):
-        # 递归处理列表中的值
+    if isinstance(value, dict):
+        return {key: safe_convert_numeric(item) for key, item in value.items()}
+    if isinstance(value, list):
         return [safe_convert_numeric(item) for item in value]
     return value
 
-# 创建FastAPI应用
-app = FastAPI(
-    title="AntSK文件切片服务",
-    description="基于语义理解的智能文本切片API服务",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-
-# 创建必要的目录
-from pathlib import Path
-Path("temp").mkdir(exist_ok=True)
-Path("static").mkdir(exist_ok=True)
-Path("templates").mkdir(exist_ok=True)
-
-# 设置静态文件和模板
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
-# 全局切片器实例
-chunker = None
 
 class ChunkConfigRequest(BaseModel):
-    """切片配置请求模型"""
     min_chunk_size: int = Field(default=200, ge=50, le=1000, description="最小切片字符数")
     max_chunk_size: int = Field(default=1500, ge=500, le=5000, description="最大切片字符数")
     target_chunk_size: int = Field(default=800, ge=200, le=2000, description="目标切片字符数")
@@ -74,171 +73,120 @@ class ChunkConfigRequest(BaseModel):
     preserve_structure: bool = Field(default=True, description="是否保持文档结构")
     handle_special_content: bool = Field(default=True, description="是否处理特殊内容")
 
+
 class ChunkResponse(BaseModel):
-    """切片结果响应模型"""
     content: str = Field(description="切片内容")
     start_pos: int = Field(description="起始位置")
     end_pos: int = Field(description="结束位置")
-    semantic_score: float = Field(description="语义连贯性得分")
-    token_count: int = Field(description="Token数量")
+    semantic_score: float = Field(description="语义连贯得分")
+    token_count: int = Field(description="Token 数量")
     paragraph_indices: List[int] = Field(description="包含的段落索引")
     chunk_type: str = Field(description="切片类型")
-    metadata: Dict = Field(description="元数据信息")
-    # 新增字段
-    has_table: Optional[bool] = Field(default=False, description="是否包含表格")
-    has_image: Optional[bool] = Field(default=False, description="是否包含图片")
-    element_count: Optional[int] = Field(default=0, description="包含的元素数量")
-    content_types: Optional[List[str]] = Field(default=[], description="内容类型列表")
+    metadata: Dict = Field(description="元数据")
+    has_table: bool = Field(default=False, description="是否包含表格")
+    has_image: bool = Field(default=False, description="是否包含图片")
+    element_count: int = Field(default=0, description="包含的元素数量")
+    content_types: List[str] = Field(default_factory=list, description="内容类型列表")
+
 
 class ProcessResponse(BaseModel):
-    """处理结果响应模型"""
     success: bool = Field(description="是否成功")
     message: str = Field(description="响应消息")
     chunks: List[ChunkResponse] = Field(description="切片结果列表")
     total_chunks: int = Field(description="切片总数")
-    processing_time: float = Field(description="处理时间（秒）")
+    processing_time: float = Field(description="处理耗时，单位秒")
     file_info: Dict = Field(description="文件信息")
-    # 新增字段
-    document_summary: Optional[Dict] = Field(default={}, description="文档摘要信息")
-    extraction_info: Optional[Dict] = Field(default={}, description="提取信息统计")
+    document_summary: Dict = Field(default_factory=dict, description="文档摘要信息")
+    extraction_info: Dict = Field(default_factory=dict, description="提取统计信息")
 
-@app.on_event("startup")
-async def startup_event():
-    """应用启动时初始化"""
-    global chunker
+
+def parse_chunk_config(config_payload: Optional[str]) -> ChunkConfig:
+    """Parse request config once and keep API logic simple."""
+    if not config_payload:
+        return ChunkConfig()
+
     try:
-        logger.info("正在初始化语义切片器...")
-        chunker = SemanticChunker()
-        logger.info("语义切片器初始化完成")
-    except Exception as e:
-        logger.error(f"初始化失败: {e}")
-        raise
+        config_dict = json.loads(config_payload)
+        request_config = ChunkConfigRequest(**config_dict)
+        return ChunkConfig(
+            min_chunk_size=request_config.min_chunk_size,
+            max_chunk_size=request_config.max_chunk_size,
+            target_chunk_size=request_config.target_chunk_size,
+            overlap_ratio=request_config.overlap_ratio,
+            semantic_threshold=request_config.semantic_threshold,
+            paragraph_merge_threshold=request_config.paragraph_merge_threshold,
+            language=request_config.language,
+            preserve_structure=request_config.preserve_structure,
+            handle_special_content=request_config.handle_special_content,
+        )
+    except Exception as exc:
+        logger.warning("Failed to parse config, using defaults: %s", exc)
+        return ChunkConfig()
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    """根路径重定向到主页"""
-    return FileResponse("home.html")
 
-@app.get("/home", response_class=HTMLResponse)
-async def home():
-    """主页 - 产品介绍页面"""
-    return FileResponse("home.html")
-
-@app.get("/chunker", response_class=HTMLResponse)
-async def chunker():
-    """文档切片工具页面"""
-    return FileResponse("chunker.html")
-
-@app.get("/health")
-async def health_check():
-    """健康检查接口"""
-    return {"status": "healthy", "service": "AntSK文件切片服务"}
-
-@app.post("/api/process-file", response_model=ProcessResponse)
-async def process_file(
-    request: Request,
-    file: UploadFile = File(..., description="上传的文件(支持PDF、Word格式)"),
-    config: Optional[str] = Form(None, description="切片配置JSON字符串(可选)")
-):
-    """
-    处理上传的文件,进行语义切片
-    """
-    import time
-    start_time = time.time()
-    
-    # 获取图片基础URL:优先使用环境变量,否则从请求动态构建
+def build_image_base_url(request: Request) -> str:
     if IMAGE_BASE_URL:
-        image_base_url = IMAGE_BASE_URL
-    else:
-        host = request.headers.get('host', 'localhost:8000')
-        scheme = request.url.scheme  # http 或 https
-        image_base_url = f"{scheme}://{host}"
-    
-    try:
-        # 检查文件类型
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="文件名不能为空")
-        
-        file_ext = Path(file.filename).suffix.lower()
-        supported_formats = ['.pdf', '.docx', '.txt', '.xlsx', '.xls', '.pptx']
-        if file_ext not in supported_formats:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"不支持的文件格式: {file_ext}，支持格式: {', '.join(supported_formats)}"
-            )
-        
-        # 解析配置
-        chunk_config = ChunkConfig()
-        if config:
-            try:
-                config_dict = json.loads(config)
-                config_request = ChunkConfigRequest(**config_dict)
-                chunk_config = ChunkConfig(
-                    min_chunk_size=config_request.min_chunk_size,
-                    max_chunk_size=config_request.max_chunk_size,
-                    target_chunk_size=config_request.target_chunk_size,
-                    overlap_ratio=config_request.overlap_ratio,
-                    semantic_threshold=config_request.semantic_threshold,
-                    paragraph_merge_threshold=config_request.paragraph_merge_threshold,
-                    language=config_request.language,
-                    preserve_structure=config_request.preserve_structure,
-                    handle_special_content=config_request.handle_special_content
-                )
-            except Exception as e:
-                logger.warning(f"配置解析失败，使用默认配置: {e}")
-        
-        # 更新切片器配置
-        chunker.config = chunk_config
-        
-        # 更新图片URL配置
-        chunker.image_base_url = image_base_url
-        chunker.document_parser.image_base_url = image_base_url
-        
-        # 保存临时文件
-        temp_dir = Path("temp")
-        temp_dir.mkdir(exist_ok=True)
-        temp_file = temp_dir / file.filename
-        
-        with open(temp_file, "wb") as f:
-            content = await file.read()
-            f.write(content)
-        
-        # 处理文件
-        chunks = chunker.process_file(str(temp_file))
-        
-        # 清理临时文件
-        temp_file.unlink(missing_ok=True)
-        
-        # 转换为响应格式
-        chunk_responses = []
-        total_tables = 0
-        total_images = 0
-        
-        for chunk in chunks:
-            # 提取新的元数据信息
-            chunk_metadata = chunk.metadata or {}
-            has_table = chunk_metadata.get('has_table', False)
-            has_image = chunk_metadata.get('has_image', False)
-            element_count = chunk_metadata.get('element_count', 0)
-            
-            # 统计总数
-            if has_table:
-                total_tables += 1
-            if has_image:
-                total_images += 1
-            
-            # 确定内容类型
-            content_types = []
-            if chunk.chunk_type == 'table_content':
-                content_types.append('table')
-            elif chunk.chunk_type == 'image_content':
-                content_types.append('image')
-            elif chunk.chunk_type == 'mixed_content':
-                content_types.extend(['text', 'table', 'image'])
-            else:
-                content_types.append('text')
-            
-            chunk_response = ChunkResponse(
+        return IMAGE_BASE_URL
+
+    host = request.headers.get("host", "localhost:8000")
+    return f"{request.url.scheme}://{host}"
+
+
+def build_request_chunker(config: ChunkConfig, image_base_url: str) -> EnhancedSemanticChunker:
+    """Create a request-scoped chunker without sharing mutable runtime config."""
+    model_name = service_chunker.model_name if service_chunker is not None else "all-MiniLM-L6-v2"
+    return EnhancedSemanticChunker(
+        config=config,
+        model_name=model_name,
+        image_base_url=image_base_url,
+    )
+
+
+async def save_upload_to_temp(upload: UploadFile) -> Tuple[Path, int]:
+    """Stream upload content to disk to avoid loading the whole file in memory."""
+    original_name = Path(upload.filename or "upload.bin").name
+    temp_path = TEMP_DIR / f"{uuid.uuid4().hex}_{original_name}"
+    total_size = 0
+
+    with temp_path.open("wb") as output_file:
+        while True:
+            chunk = await upload.read(1024 * 1024)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            output_file.write(chunk)
+
+    await upload.seek(0)
+    return temp_path, total_size
+
+
+def build_chunk_responses(chunks) -> Tuple[List[ChunkResponse], int, int]:
+    chunk_responses: List[ChunkResponse] = []
+    total_tables = 0
+    total_images = 0
+
+    for chunk in chunks:
+        chunk_metadata = chunk.metadata or {}
+        has_table = bool(chunk_metadata.get("has_table", False))
+        has_image = bool(chunk_metadata.get("has_image", False))
+        element_count = int(chunk_metadata.get("element_count", 0))
+
+        if has_table:
+            total_tables += 1
+        if has_image:
+            total_images += 1
+
+        if chunk.chunk_type == "table_content":
+            content_types = ["table"]
+        elif chunk.chunk_type == "image_content":
+            content_types = ["image"]
+        elif chunk.chunk_type == "mixed_content":
+            content_types = ["text", "table", "image"]
+        else:
+            content_types = ["text"]
+
+        chunk_responses.append(
+            ChunkResponse(
                 content=chunk.content,
                 start_pos=chunk.start_pos,
                 end_pos=chunk.end_pos,
@@ -250,12 +198,82 @@ async def process_file(
                 has_table=has_table,
                 has_image=has_image,
                 element_count=element_count,
-                content_types=content_types
+                content_types=content_types,
             )
-            chunk_responses.append(chunk_response)
-        
+        )
+
+    return chunk_responses, total_tables, total_images
+
+
+@app.on_event("startup")
+async def startup_event():
+    global service_chunker
+    try:
+        logger.info("Initializing semantic chunker service...")
+        service_chunker = EnhancedSemanticChunker(
+            image_base_url=IMAGE_BASE_URL or "http://localhost:8000"
+        )
+        logger.info("Semantic chunker service is ready")
+    except Exception as exc:
+        logger.error("Failed to initialize chunker service: %s", exc)
+        raise
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return FileResponse("home.html")
+
+
+@app.get("/home", response_class=HTMLResponse)
+async def home():
+    return FileResponse("home.html")
+
+
+@app.get("/chunker", response_class=HTMLResponse)
+async def chunker_page():
+    return FileResponse("chunker.html")
+
+
+@app.get("/health")
+async def health_check():
+    chunker_health = service_chunker.health_check() if service_chunker is not None else {}
+    return {
+        "status": "healthy",
+        "service": "AntSK文件切片服务",
+        "model_cache": SemanticAnalyzer.get_cache_stats(),
+        "chunker": chunker_health,
+    }
+
+
+@app.post("/api/process-file", response_model=ProcessResponse)
+async def process_file(
+    request: Request,
+    file: UploadFile = File(..., description="上传的文件，支持 PDF、Word、Excel、PPT、TXT"),
+    config: Optional[str] = Form(None, description="切片配置 JSON 字符串，可选"),
+):
+    start_time = time.time()
+    temp_file: Optional[Path] = None
+
+    try:
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="文件名不能为空")
+
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in SUPPORTED_FORMATS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的文件格式: {file_ext}，支持格式: {', '.join(SUPPORTED_FORMATS)}",
+            )
+
+        chunk_config = parse_chunk_config(config)
+        image_base_url = build_image_base_url(request)
+        request_chunker = build_request_chunker(chunk_config, image_base_url)
+
+        temp_file, file_size = await save_upload_to_temp(file)
+        chunks = request_chunker.process_file_safe(str(temp_file))
+        chunk_responses, total_tables, total_images = build_chunk_responses(chunks)
+
         processing_time = time.time() - start_time
-        
         return ProcessResponse(
             success=True,
             message="文件处理成功",
@@ -264,90 +282,56 @@ async def process_file(
             processing_time=processing_time,
             file_info={
                 "filename": file.filename,
-                "size": len(content),
+                "size": file_size,
                 "type": file_ext,
-                "content_type": file.content_type
+                "content_type": file.content_type,
             },
             document_summary={
-                "total_paragraphs": sum(1 for chunk in chunks if chunk.chunk_type in ['text_content', 'mixed_content']),
+                "total_paragraphs": sum(
+                    1 for chunk in chunks if chunk.chunk_type in ["text_content", "mixed_content"]
+                ),
                 "total_tables": total_tables,
                 "total_images": total_images,
-                "chunk_types": list(set(chunk.chunk_type for chunk in chunks))
+                "chunk_types": sorted({chunk.chunk_type for chunk in chunks}),
             },
             extraction_info={
                 "chunks_with_tables": total_tables,
                 "chunks_with_images": total_images,
-                "average_chunk_size": sum(chunk.token_count for chunk in chunks) / len(chunks) if chunks else 0,
-                "supported_formats": ['.pdf', '.docx', '.txt', '.xlsx', '.xls', '.pptx']
-            }
+                "average_chunk_size": (
+                    sum(chunk.token_count for chunk in chunks) / len(chunks) if chunks else 0
+                ),
+                "supported_formats": SUPPORTED_FORMATS,
+            },
         )
-        
-    except Exception as e:
-        logger.error(f"文件处理失败: {e}")
-        raise HTTPException(status_code=500, detail=f"文件处理失败: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("File processing failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"文件处理失败: {exc}")
+    finally:
+        if temp_file is not None:
+            temp_file.unlink(missing_ok=True)
+        await file.close()
+
 
 @app.post("/api/process-text", response_model=ProcessResponse)
 async def process_text(
-    text: str = Form(..., description="要处理的文本内容"),
-    config: Optional[str] = Form(None, description="切片配置JSON字符串（可选）")
+    request: Request,
+    text: str = Form(..., description="需要处理的文本内容"),
+    config: Optional[str] = Form(None, description="切片配置 JSON 字符串，可选"),
 ):
-    """
-    直接处理文本内容，进行语义切片
-    """
-    import time
     start_time = time.time()
-    
+
     try:
         if not text.strip():
             raise HTTPException(status_code=400, detail="文本内容不能为空")
-        
-        # 解析配置
-        chunk_config = ChunkConfig()
-        if config:
-            try:
-                config_dict = json.loads(config)
-                config_request = ChunkConfigRequest(**config_dict)
-                chunk_config = ChunkConfig(
-                    min_chunk_size=config_request.min_chunk_size,
-                    max_chunk_size=config_request.max_chunk_size,
-                    target_chunk_size=config_request.target_chunk_size,
-                    overlap_ratio=config_request.overlap_ratio,
-                    semantic_threshold=config_request.semantic_threshold,
-                    paragraph_merge_threshold=config_request.paragraph_merge_threshold,
-                    language=config_request.language,
-                    preserve_structure=config_request.preserve_structure,
-                    handle_special_content=config_request.handle_special_content
-                )
-            except Exception as e:
-                logger.warning(f"配置解析失败，使用默认配置: {e}")
-        
-        # 更新切片器配置
-        chunker.config = chunk_config
-        
-        # 处理文本
-        chunks = chunker.process_text(text)
-        
-        # 转换为响应格式（文本处理简化版）
-        chunk_responses = []
-        for chunk in chunks:
-            chunk_response = ChunkResponse(
-                content=chunk.content,
-                start_pos=chunk.start_pos,
-                end_pos=chunk.end_pos,
-                semantic_score=safe_convert_numeric(chunk.semantic_score),
-                token_count=safe_convert_numeric(chunk.token_count),
-                paragraph_indices=chunk.paragraph_indices,
-                chunk_type=chunk.chunk_type,
-                metadata=safe_convert_numeric(chunk.metadata),
-                has_table=False,  # 纯文本不包含表格
-                has_image=False,  # 纯文本不包含图片
-                element_count=1,  # 每个切片一个文本元素
-                content_types=['text']
-            )
-            chunk_responses.append(chunk_response)
-        
+
+        chunk_config = parse_chunk_config(config)
+        request_chunker = build_request_chunker(chunk_config, build_image_base_url(request))
+        chunks = request_chunker.process_text_enhanced(text)
+        chunk_responses, _, _ = build_chunk_responses(chunks)
+
         processing_time = time.time() - start_time
-        
         return ProcessResponse(
             success=True,
             message="文本处理成功",
@@ -357,29 +341,32 @@ async def process_text(
             file_info={
                 "type": "text",
                 "size": len(text),
-                "encoding": "utf-8"
+                "encoding": "utf-8",
             },
             document_summary={
                 "total_paragraphs": len(chunks),
                 "total_tables": 0,
                 "total_images": 0,
-                "chunk_types": ['text_content']
+                "chunk_types": sorted({chunk.chunk_type for chunk in chunks}) or ["text_content"],
             },
             extraction_info={
                 "chunks_with_tables": 0,
                 "chunks_with_images": 0,
-                "average_chunk_size": sum(chunk.token_count for chunk in chunks) / len(chunks) if chunks else 0,
-                "supported_formats": ['.pdf', '.docx', '.txt', '.xlsx', '.xls', '.pptx']
-            }
+                "average_chunk_size": (
+                    sum(chunk.token_count for chunk in chunks) / len(chunks) if chunks else 0
+                ),
+                "supported_formats": SUPPORTED_FORMATS,
+            },
         )
-        
-    except Exception as e:
-        logger.error(f"文本处理失败: {e}")
-        raise HTTPException(status_code=500, detail=f"文本处理失败: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Text processing failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"文本处理失败: {exc}")
+
 
 @app.get("/api/config/default", response_model=ChunkConfigRequest)
 async def get_default_config():
-    """获取默认切片配置"""
     config = ChunkConfig()
     return ChunkConfigRequest(
         min_chunk_size=config.min_chunk_size,
@@ -390,20 +377,15 @@ async def get_default_config():
         paragraph_merge_threshold=config.paragraph_merge_threshold,
         language=config.language,
         preserve_structure=config.preserve_structure,
-        handle_special_content=config.handle_special_content
+        handle_special_content=config.handle_special_content,
     )
 
+
 if __name__ == "__main__":
-    # 创建必要的目录
-    Path("temp").mkdir(exist_ok=True)
-    Path("static").mkdir(exist_ok=True)
-    Path("templates").mkdir(exist_ok=True)
-    
-    # 启动服务
     uvicorn.run(
         "api_server:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
-        log_level="info"
+        log_level="info",
     )

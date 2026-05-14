@@ -257,7 +257,7 @@ class ChunkOptimizer:
             
             sub_content = content[start:end].strip()
             if sub_content:
-                from ..core.enhanced_semantic_chunker import TextChunk
+                from .enhanced_semantic_chunker import TextChunk
                 sub_chunk = TextChunk(
                     content=sub_content,
                     start_pos=start,
@@ -289,7 +289,7 @@ class ChunkOptimizer:
         """
         content = ' '.join(sentences)
         
-        from ..core.enhanced_semantic_chunker import TextChunk
+        from .enhanced_semantic_chunker import TextChunk
         return TextChunk(
             content=content,
             start_pos=0,  # 相对位置
@@ -317,12 +317,12 @@ class ChunkOptimizer:
             合并后的切片
         """
         merged_content = chunk1.content + '\n\n' + chunk2.content
-        merged_paragraphs = list(set(chunk1.paragraph_indices + chunk2.paragraph_indices))
+        merged_paragraphs = sorted(set(chunk1.paragraph_indices + chunk2.paragraph_indices))
         
         # 重新计算语义得分（简化为平均值）
         merged_score = (chunk1.semantic_score + chunk2.semantic_score) / 2
         
-        from ..core.enhanced_semantic_chunker import TextChunk
+        from .enhanced_semantic_chunker import TextChunk
         return TextChunk(
             content=merged_content,
             start_pos=chunk1.start_pos,
@@ -416,11 +416,12 @@ class ChunkOptimizer:
             后处理后的切片列表
         """
         processed_chunks = []
+        cursor = 0
         
         for i, chunk in enumerate(chunks):
             # 更新切片位置信息
-            chunk.start_pos = i * 1000  # 简化的位置计算
-            chunk.end_pos = chunk.start_pos + len(chunk.content)
+            chunk.start_pos = cursor
+            chunk.end_pos = cursor + len(chunk.content)
             
             # 清理内容
             chunk.content = self._clean_chunk_content(chunk.content)
@@ -434,6 +435,7 @@ class ChunkOptimizer:
             chunk.metadata['chunk_id'] = i
             
             processed_chunks.append(chunk)
+            cursor = chunk.end_pos
         
         return processed_chunks
     
