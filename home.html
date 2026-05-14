@@ -56,17 +56,17 @@
     
     <style>
         :root {
-            --primary-color: #10B981;
-            --primary-gradient: linear-gradient(135deg, #10B981 0%, #059669 100%);
-            --secondary-color: #064E3B;
-            --accent-color: #34D399;
-            --text-color: #333;
-            --text-light: #666;
-            --background: #f9fafb;
-            --surface: rgba(255, 255, 255, 0.95);
-            --border: #d1fae5;
-            --shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            --shadow-lg: 0 25px 50px rgba(16, 185, 129, 0.15);
+            --primary-color: #000000;
+            --primary-gradient: #000000;
+            --secondary-color: #f7f7f7;
+            --accent-color: #666666;
+            --text-color: #111111;
+            --text-light: #555555;
+            --background: #ffffff;
+            --surface: #ffffff;
+            --border: #eaeaea;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
         }
 
         * {
@@ -79,7 +79,7 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.6;
             color: var(--text-color);
-            background: linear-gradient(135deg, #f0fdf4 0%, #d1fae5 50%, #ecfdf5 100%);
+            background: var(--background);
             min-height: 100vh;
         }
 
@@ -89,8 +89,7 @@
             top: 0;
             left: 0;
             right: 0;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.98);
             border-bottom: 1px solid var(--border);
             z-index: 1000;
             padding: 1rem 0;
@@ -133,20 +132,18 @@
         }
 
         .cta-button {
-            background: var(--primary-gradient);
+            background: var(--primary-color);
             color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 25px;
+            padding: 0.5rem 1.25rem;
+            border-radius: 6px;
             text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: none;
         }
 
         .cta-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(16, 185, 129, 0.4);
-            background: var(--secondary-color);
+            background: var(--accent-color);
         }
 
         /* 英雄区域 */
@@ -158,13 +155,10 @@
         }
 
         .hero h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-size: clamp(2.5rem, 5vw, 3.5rem);
             font-weight: 700;
             margin-bottom: 1.5rem;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--text-color);
             line-height: 1.2;
         }
 
@@ -186,42 +180,38 @@
         }
 
         .btn-primary {
-            background: var(--primary-gradient);
+            background: var(--primary-color);
             color: white;
-            padding: 1rem 2rem;
-            border-radius: 30px;
+            padding: 0.75rem 2rem;
+            border-radius: 6px;
             text-decoration: none;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-            box-shadow: var(--shadow-lg);
-            display: flex;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            box-shadow: none;
+            display: inline-flex;
             align-items: center;
             gap: 0.5rem;
         }
 
         .btn-primary:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 30px 60px rgba(16, 185, 129, 0.25);
-            background: var(--secondary-color);
+            background: var(--accent-color);
         }
 
         .btn-secondary {
             background: transparent;
             color: var(--primary-color);
-            padding: 1rem 2rem;
-            border: 2px solid var(--primary-color);
-            border-radius: 30px;
+            padding: 0.75rem 2rem;
+            border: 1px solid var(--primary-color);
+            border-radius: 6px;
             text-decoration: none;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: all 0.2s ease;
         }
 
         .btn-secondary:hover {
-            background: var(--primary-color);
-            color: white;
-            transform: translateY(-2px);
+            background: var(--secondary-color);
         }
 
         /* 特性展示 */
@@ -234,15 +224,15 @@
 
         .section-title {
             text-align: center;
-            font-size: 2.5rem;
-            font-weight: 700;
+            font-size: 2rem;
+            font-weight: 600;
             margin-bottom: 1rem;
             color: var(--text-color);
         }
 
         .section-subtitle {
             text-align: center;
-            font-size: 1.1rem;
+            font-size: 1rem;
             color: var(--text-light);
             margin-bottom: 3rem;
             max-width: 600px;
@@ -260,16 +250,15 @@
         .feature-card {
             background: var(--surface);
             padding: 2rem;
-            border-radius: 20px;
-            box-shadow: var(--shadow);
+            border-radius: 8px;
+            box-shadow: none;
             text-align: center;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             border: 1px solid var(--border);
         }
 
         .feature-card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-lg);
+            border-color: var(--primary-color);
         }
 
         .feature-icon {
@@ -291,7 +280,7 @@
 
         /* 架构展示 */
         .architecture {
-            background: var(--surface);
+            background: var(--secondary-color);
             padding: 4rem 2rem;
             margin: 4rem 0;
             scroll-margin-top: 100px;
@@ -305,10 +294,11 @@
 
         .architecture-diagram {
             background: white;
-            border-radius: 20px;
+            border-radius: 8px;
             padding: 2rem;
             margin: 3rem 0;
-            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            box-shadow: none;
         }
 
         .architecture-flow {
@@ -320,28 +310,28 @@
         }
 
         .arch-step {
-            background: #d1fae5;
+            background: var(--background);
             padding: 1.5rem;
-            border-radius: 15px;
-            border: 2px solid var(--border);
+            border-radius: 6px;
+            border: 1px solid var(--border);
             min-width: 150px;
             position: relative;
         }
 
         .arch-step h4 {
-            color: var(--primary-color);
+            color: var(--text-color);
             font-weight: 600;
             margin-bottom: 0.5rem;
         }
 
         .arch-step p {
             font-size: 0.9rem;
-            color: var(--primary-color);
+            color: var(--text-light);
         }
 
         .arch-arrow {
             font-size: 1.5rem;
-            color: var(--primary-color);
+            color: var(--text-muted);
             margin: 0 1rem;
         }
 
@@ -363,15 +353,15 @@
         .use-case-card {
             background: white;
             padding: 2rem;
-            border-radius: 20px;
-            box-shadow: var(--shadow);
-            border-left: 4px solid var(--primary-color);
-            transition: all 0.3s ease;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            box-shadow: none;
+            border-left: 3px solid var(--primary-color);
+            transition: all 0.2s ease;
         }
 
         .use-case-card:hover {
-            transform: translateY(-3px);
-            box-shadow: var(--shadow-lg);
+            background: var(--secondary-color);
         }
 
         .use-case-icon {
@@ -415,7 +405,7 @@
 
         /* 行动召唤 */
         .cta-section {
-            background: var(--primary-gradient);
+            background: var(--text-color);
             color: white;
             text-align: center;
             padding: 4rem 2rem;
@@ -428,41 +418,40 @@
         }
 
         .cta-title {
-            font-size: 2.5rem;
-            font-weight: 700;
+            font-size: 2rem;
+            font-weight: 600;
             margin-bottom: 1rem;
         }
 
         .cta-subtitle {
-            font-size: 1.2rem;
+            font-size: 1rem;
             opacity: 0.9;
             margin-bottom: 2rem;
         }
 
         .btn-white {
             background: white;
-            color: var(--primary-color);
-            padding: 1rem 2.5rem;
-            border-radius: 30px;
+            color: var(--text-color);
+            padding: 0.75rem 2rem;
+            border-radius: 6px;
             text-decoration: none;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-            box-shadow: 0 8px 25px rgba(255, 255, 255, 0.2);
+            box-shadow: none;
             margin-right: 1rem;
         }
 
         .btn-white:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 35px rgba(255, 255, 255, 0.3);
+            background: var(--secondary-color);
         }
 
         /* 页脚 */
         .footer {
-            background: #f0fdf4;
+            background: var(--background);
             padding: 3rem 2rem 2rem;
             border-top: 1px solid var(--border);
         }
