@@ -36,7 +36,7 @@ docker-compose logs -f antsk-filechunk
 
 ```bash
 # 标准构建
-docker build -t antsk-filechunk:latest .
+docker build -t antsk-filechunk:latest . --no-cache
 
 # 如果遇到包依赖问题，尝试精简版
 docker build -f Dockerfile.slim -t antsk-filechunk:slim .
