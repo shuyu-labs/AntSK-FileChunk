@@ -103,11 +103,11 @@ python test_api.py
 
 | 参数名称 | 类型 | 默认值 | 说明 |
 |---------|------|--------|------|
-| min_chunk_size | int | 200 | 最小切片字符数 (50-1000) |
-| max_chunk_size | int | 1500 | 最大切片字符数 (500-5000) |
-| target_chunk_size | int | 800 | 目标切片字符数 (200-2000) |
+| min_chunk_size | int | 500 | 最小切片字符数 (50-1000) |
+| max_chunk_size | int | 3000 | 最大切片字符数 (500-5000) |
+| target_chunk_size | int | 1800 | 目标切片字符数 (200-2000) |
 | overlap_ratio | float | 0.1 | 重叠比例 (0.0-0.5) |
-| semantic_threshold | float | 0.7 | 语义相似度阈值 (0.0-1.0) |
+| semantic_threshold | float | 0.6 | 语义相似度阈值 (0.0-1.0) |
 | paragraph_merge_threshold | float | 0.8 | 段落合并阈值 (0.0-1.0) |
 | language | str | "zh" | 语言设置 ("zh"/"en") |
 | preserve_structure | bool | true | 是否保持文档结构 |

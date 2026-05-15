@@ -105,7 +105,9 @@ def _install_test_stubs():
 _install_test_stubs()
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from antsk_filechunk.enhanced_semantic_chunker import ChunkConfig, SemanticChunker
+from antsk_filechunk.chunk_optimizer import ChunkOptimizer
+from antsk_filechunk.enhanced_semantic_chunker import ChunkConfig, SemanticChunker, TextChunk
+from antsk_filechunk.quality_evaluator import QualityEvaluator
 from antsk_filechunk.unified_document_parser import DocumentContent
 
 
@@ -194,6 +196,71 @@ class UnifiedChunkingTests(unittest.TestCase):
         self.assertEqual(chunks[0].paragraph_indices, [0, 1, 2])
         self.assertIn("alpha topic", chunks[0].content)
         self.assertIn("gamma topic", chunks[0].content)
+
+    def test_chunk_optimizer_adjusts_incomplete_boundary(self):
+        optimizer = ChunkOptimizer(
+            ChunkConfig(
+                min_chunk_size=5,
+                max_chunk_size=80,
+                target_chunk_size=40,
+                overlap_ratio=0.0,
+                language="en",
+            )
+        )
+        chunks = [
+            TextChunk(
+                content="This sentence is cut",
+                start_pos=0,
+                end_pos=20,
+                semantic_score=0.9,
+                token_count=4,
+                paragraph_indices=[0],
+                metadata={},
+            ),
+            TextChunk(
+                content="off here. Next sentence remains.",
+                start_pos=20,
+                end_pos=52,
+                semantic_score=0.8,
+                token_count=4,
+                paragraph_indices=[1],
+                metadata={},
+            ),
+        ]
+
+        optimized = optimizer._optimize_boundaries(chunks)
+
+        self.assertEqual(optimized[0].content, "This sentence is cut off here.")
+        self.assertEqual(optimized[1].content, "Next sentence remains.")
+        self.assertTrue(optimized[0].metadata["boundary_adjusted"])
+        self.assertTrue(optimized[1].metadata["requires_score_refresh"])
+
+    def test_quality_evaluator_recomputes_coherence_when_refresh_required(self):
+        class DeterministicSemanticAnalyzer:
+            def compute_embeddings(self, texts):
+                mapping = {
+                    "这是第一段主题内容": np.asarray([1.0, 0.0]),
+                    "这是完全不同的第二段内容": np.asarray([0.0, 1.0]),
+                }
+                return np.asarray([mapping[text] for text in texts])
+
+            def calculate_text_similarity(self, text1, text2):
+                return 0.5
+
+        evaluator = QualityEvaluator(DeterministicSemanticAnalyzer())
+        chunk = TextChunk(
+            content="这是第一段主题内容。这是完全不同的第二段内容。",
+            start_pos=0,
+            end_pos=24,
+            semantic_score=0.99,
+            token_count=10,
+            paragraph_indices=[0, 1],
+            metadata={"requires_score_refresh": True},
+        )
+
+        result = evaluator.evaluate_chunks([chunk])
+
+        self.assertLess(result["coherence_scores"][0], 0.2)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import uvicorn
@@ -45,13 +45,14 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 service_chunker: Optional[EnhancedSemanticChunker] = None
+DEFAULT_CHUNK_CONFIG = ChunkConfig()
 
 
-def safe_convert_numeric(value):
+def safe_convert_numeric(value: Any) -> Any:
     """Convert numpy values so they can be serialized by FastAPI."""
-    if isinstance(value, (np.float32, np.float64)):
+    if isinstance(value, np.floating):
         return float(value)
-    if isinstance(value, (np.int32, np.int64)):
+    if isinstance(value, np.integer):
         return int(value)
     if isinstance(value, np.ndarray):
         return value.tolist()
@@ -63,15 +64,15 @@ def safe_convert_numeric(value):
 
 
 class ChunkConfigRequest(BaseModel):
-    min_chunk_size: int = Field(default=200, ge=50, le=1000, description="最小切片字符数")
-    max_chunk_size: int = Field(default=1500, ge=500, le=5000, description="最大切片字符数")
-    target_chunk_size: int = Field(default=800, ge=200, le=2000, description="目标切片字符数")
-    overlap_ratio: float = Field(default=0.1, ge=0.0, le=0.5, description="重叠比例")
-    semantic_threshold: float = Field(default=0.7, ge=0.0, le=1.0, description="语义相似度阈值")
-    paragraph_merge_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="段落合并阈值")
-    language: str = Field(default="zh", pattern="^(zh|en)$", description="语言设置")
-    preserve_structure: bool = Field(default=True, description="是否保持文档结构")
-    handle_special_content: bool = Field(default=True, description="是否处理特殊内容")
+    min_chunk_size: int = Field(default=DEFAULT_CHUNK_CONFIG.min_chunk_size, ge=50, le=1000, description="最小切片字符数")
+    max_chunk_size: int = Field(default=DEFAULT_CHUNK_CONFIG.max_chunk_size, ge=500, le=5000, description="最大切片字符数")
+    target_chunk_size: int = Field(default=DEFAULT_CHUNK_CONFIG.target_chunk_size, ge=200, le=2000, description="目标切片字符数")
+    overlap_ratio: float = Field(default=DEFAULT_CHUNK_CONFIG.overlap_ratio, ge=0.0, le=0.5, description="重叠比例")
+    semantic_threshold: float = Field(default=DEFAULT_CHUNK_CONFIG.semantic_threshold, ge=0.0, le=1.0, description="语义相似度阈值")
+    paragraph_merge_threshold: float = Field(default=DEFAULT_CHUNK_CONFIG.paragraph_merge_threshold, ge=0.0, le=1.0, description="段落合并阈值")
+    language: str = Field(default=DEFAULT_CHUNK_CONFIG.language, pattern="^(zh|en)$", description="语言设置")
+    preserve_structure: bool = Field(default=DEFAULT_CHUNK_CONFIG.preserve_structure, description="是否保持文档结构")
+    handle_special_content: bool = Field(default=DEFAULT_CHUNK_CONFIG.handle_special_content, description="是否处理特殊内容")
 
 
 class ChunkResponse(BaseModel):
@@ -185,16 +186,20 @@ def build_chunk_responses(chunks) -> Tuple[List[ChunkResponse], int, int]:
         else:
             content_types = ["text"]
 
+        metadata = safe_convert_numeric(chunk.metadata)
+        if not isinstance(metadata, dict):
+            metadata = {}
+
         chunk_responses.append(
             ChunkResponse(
                 content=chunk.content,
                 start_pos=chunk.start_pos,
                 end_pos=chunk.end_pos,
-                semantic_score=safe_convert_numeric(chunk.semantic_score),
-                token_count=safe_convert_numeric(chunk.token_count),
+                semantic_score=float(safe_convert_numeric(chunk.semantic_score)),
+                token_count=int(safe_convert_numeric(chunk.token_count)),
                 paragraph_indices=chunk.paragraph_indices,
                 chunk_type=chunk.chunk_type,
-                metadata=safe_convert_numeric(chunk.metadata),
+                metadata=metadata,
                 has_table=has_table,
                 has_image=has_image,
                 element_count=element_count,

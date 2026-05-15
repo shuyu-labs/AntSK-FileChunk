@@ -116,8 +116,12 @@ class QualityEvaluator:
         
         for chunk in chunks:
             try:
-                # 使用切片自身的语义得分
-                if hasattr(chunk, 'semantic_score') and chunk.semantic_score is not None:
+                metadata = getattr(chunk, 'metadata', {}) or {}
+
+                # 优化后的切片需要基于当前内容重算，避免沿用旧分数
+                if metadata.get('requires_score_refresh'):
+                    coherence_score = self._calculate_internal_coherence(chunk.content)
+                elif hasattr(chunk, 'semantic_score') and chunk.semantic_score is not None:
                     coherence_score = chunk.semantic_score
                 else:
                     # 重新计算连贯性

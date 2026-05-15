@@ -266,7 +266,10 @@ class ChunkOptimizer:
                     token_count=self._estimate_token_count(sub_content),
                     paragraph_indices=[],
                     chunk_type=chunk.chunk_type,
-                    metadata=chunk.metadata.copy() if chunk.metadata else {}
+                    metadata={
+                        **(chunk.metadata.copy() if chunk.metadata else {}),
+                        'requires_score_refresh': True,
+                    }
                 )
                 sub_chunks.append(sub_chunk)
             
@@ -301,7 +304,8 @@ class ChunkOptimizer:
             metadata={
                 **(parent_chunk.metadata or {}),
                 'parent_chunk': True,
-                'sub_chunk_index': index
+                'sub_chunk_index': index,
+                'requires_score_refresh': True,
             }
         )
     
@@ -333,7 +337,8 @@ class ChunkOptimizer:
             chunk_type='content',
             metadata={
                 'merged': True,
-                'original_chunks': [chunk1.chunk_type, chunk2.chunk_type]
+                'original_chunks': [chunk1.chunk_type, chunk2.chunk_type],
+                'requires_score_refresh': True,
             }
         )
     
@@ -386,9 +391,29 @@ class ChunkOptimizer:
         Returns:
             调整量（字符数，正数表示向后调整，负数表示向前调整）
         """
-        # 简化的边界优化逻辑
-        # 可以根据需要实现更复杂的边界检测算法
-        return 0
+        if not chunk1.content or not chunk2.content:
+            return 0
+
+        if self._ends_with_sentence_boundary(chunk1.content):
+            return 0
+
+        leading_sentence_length = self._find_leading_sentence_boundary(chunk2.content)
+        if leading_sentence_length <= 0:
+            return 0
+
+        moved_text = chunk2.content[:leading_sentence_length].strip()
+        remaining_text = chunk2.content[leading_sentence_length:].strip()
+
+        if not moved_text or not remaining_text:
+            return 0
+
+        if len(chunk1.content) + len(moved_text) > self.config.max_chunk_size:
+            return 0
+
+        if len(remaining_text) < self.config.min_chunk_size:
+            return 0
+
+        return leading_sentence_length
     
     def _adjust_boundary(self, chunk1, chunk2, adjustment: int) -> List:
         """
@@ -402,8 +427,86 @@ class ChunkOptimizer:
         Returns:
             调整后的切片列表
         """
-        # 简化实现，返回原切片
-        return [chunk1, chunk2]
+        if adjustment <= 0:
+            return [chunk1, chunk2]
+
+        moved_text = chunk2.content[:adjustment].strip()
+        remaining_text = chunk2.content[adjustment:].strip()
+
+        if not moved_text or not remaining_text:
+            return [chunk1, chunk2]
+
+        from .enhanced_semantic_chunker import TextChunk
+
+        updated_chunk1 = TextChunk(
+            content=self._join_boundary_content(chunk1.content, moved_text),
+            start_pos=chunk1.start_pos,
+            end_pos=chunk1.end_pos,
+            semantic_score=chunk1.semantic_score,
+            token_count=chunk1.token_count,
+            paragraph_indices=list(chunk1.paragraph_indices),
+            chunk_type=chunk1.chunk_type,
+            metadata={
+                **(chunk1.metadata or {}),
+                'boundary_adjusted': True,
+                'boundary_adjustment': adjustment,
+                'requires_score_refresh': True,
+            },
+        )
+
+        updated_chunk2 = TextChunk(
+            content=remaining_text,
+            start_pos=chunk2.start_pos,
+            end_pos=chunk2.end_pos,
+            semantic_score=chunk2.semantic_score,
+            token_count=chunk2.token_count,
+            paragraph_indices=list(chunk2.paragraph_indices),
+            chunk_type=chunk2.chunk_type,
+            metadata={
+                **(chunk2.metadata or {}),
+                'boundary_adjusted': True,
+                'boundary_adjustment': -adjustment,
+                'requires_score_refresh': True,
+            },
+        )
+
+        return [updated_chunk1, updated_chunk2]
+
+    def _ends_with_sentence_boundary(self, text: str) -> bool:
+        """判断文本末尾是否已经落在自然句边界。"""
+        return bool(re.search(r'[。！？；.!?;]["”’\'\)\]\s]*$', text.strip()))
+
+    def _find_leading_sentence_boundary(self, text: str) -> int:
+        """找到文本前部第一个句边界，返回可移动的字符长度。"""
+        for index, char in enumerate(text):
+            if char not in '。！？；.!?;':
+                continue
+
+            end_index = index + 1
+            while end_index < len(text) and text[end_index] in '"”’\'\)]} \t\r\n':
+                end_index += 1
+
+            return end_index
+
+        return 0
+
+    def _join_boundary_content(self, left: str, right: str) -> str:
+        """连接边界两侧的文本，避免引入多余换行。"""
+        left = left.rstrip()
+        right = right.lstrip()
+
+        if not left:
+            return right
+        if not right:
+            return left
+
+        if re.search(r'[\u4e00-\u9fff]$', left) and re.match(r'^[\u4e00-\u9fff]', right):
+            return left + right
+
+        if left.endswith((' ', '\n', '\t')) or right.startswith((',', '，', '。', '.', '！', '!', '？', '?', '；', ';', ':', '：')):
+            return left + right
+
+        return left + ' ' + right
     
     def _post_process_chunks(self, chunks: List) -> List:
         """
