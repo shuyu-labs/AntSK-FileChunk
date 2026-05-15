@@ -412,6 +412,188 @@ class SemanticChunker:
             text = re.sub(r'[^\w\s.,!?;:"""\'()[\]<>-]', '', text)
         
         return text.strip()
+
+    def _is_markdown_table_block(self, text: str) -> bool:
+        """检查一个 markdown 块是否为表格。"""
+        lines = [line.strip() for line in text.strip().split('\n') if line.strip()]
+        if len(lines) < 2:
+            return False
+
+        has_separator = any('---' in line for line in lines)
+        has_pipes = any('|' in line for line in lines)
+        return has_separator and has_pipes
+
+    def _markdown_lines_to_paragraph_text(self, lines: List[str]) -> str:
+        """将 markdown 文本行还原为段落内容，用于与解析结果对齐。"""
+        if not lines:
+            return ""
+
+        if len(lines) == 1:
+            heading_match = re.match(r'^(#{1,6})\s+(.*)$', lines[0])
+            if heading_match:
+                return heading_match.group(2).strip()
+
+        return '\n'.join(lines).strip()
+
+    def _normalize_match_text(self, text: str) -> str:
+        """规范化文本，便于在 markdown 块和解析结果之间对齐。"""
+        normalized = self._markdown_lines_to_paragraph_text([text]) if '\n' not in text else text.strip()
+        normalized = re.sub(r'\s+', ' ', normalized)
+        return normalized.strip()
+
+    def _pop_matching_paragraph(self, content: str, paragraphs: List[Dict]) -> Dict:
+        """按内容从剩余段落中取出最匹配的一项。"""
+        target = self._normalize_match_text(content)
+
+        for index, paragraph in enumerate(paragraphs):
+            if self._normalize_match_text(paragraph.get('content', '')) == target:
+                return paragraphs.pop(index)
+
+        return {
+            'content': content,
+            'index': -1,
+            'type': 'paragraph'
+        }
+
+    def _normalize_markdown_lines(self, lines: List[str]) -> List[str]:
+        return [re.sub(r'\s+', ' ', line.strip()) for line in lines if line.strip()]
+
+    def _parse_markdown_table_block(self, block: str) -> List[List[str]]:
+        """解析 markdown 表格块，作为缺省回退。"""
+        rows = []
+        for line in block.splitlines():
+            line = line.strip()
+            if not line or '---' in line or '|' not in line:
+                continue
+            rows.append([cell.strip() for cell in line.strip('|').split('|')])
+        return rows
+
+    def _pop_matching_table(self, block: str, tables: List[Dict]) -> Dict:
+        """按 markdown 内容从剩余表格中取出最匹配的一项。"""
+        block_lines = self._normalize_markdown_lines(block.splitlines())
+
+        for index, table in enumerate(tables):
+            table_lines = self._normalize_markdown_lines(table.get('markdown', []))
+            if table_lines == block_lines:
+                return tables.pop(index)
+
+        if tables:
+            return tables.pop(0)
+
+        return {
+            'index': -1,
+            'type': 'table',
+            'data': self._parse_markdown_table_block(block),
+            'markdown': [line.rstrip() for line in block.splitlines() if line.strip()]
+        }
+
+    def _pop_matching_image(self, url: str, alt_text: str, images: List[Dict]) -> Dict:
+        """按 URL 或文件名从剩余图片中取出最匹配的一项。"""
+        for index, image in enumerate(images):
+            image_url = (image.get('url') or '').strip()
+            image_name = (image.get('filename') or '').strip()
+
+            if image_url and image_url == url:
+                return images.pop(index)
+
+            if alt_text and image_name and image_name == alt_text:
+                return images.pop(index)
+
+        return {
+            'url': url,
+            'filename': alt_text or '图片',
+            'type': 'image'
+        }
+
+    def _build_markdown_ordered_elements(self, document_content) -> List[Dict]:
+        """根据 markdown 内容恢复段落、表格、图片的原始顺序。"""
+        markdown_content = (document_content.markdown_content or '').strip()
+        if not markdown_content:
+            return []
+
+        paragraphs = list(document_content.paragraphs or [])
+        tables = list(document_content.tables or [])
+        images = list(document_content.images or [])
+        ordered_elements = []
+        image_pattern = re.compile(r'^!\[([^\]]*)\]\(([^)]+)\)$')
+
+        for block in re.split(r'\n\s*\n', markdown_content):
+            block = block.strip()
+            if not block:
+                continue
+
+            if self._is_markdown_table_block(block):
+                ordered_elements.append({
+                    'type': 'table',
+                    'original_data': self._pop_matching_table(block, tables)
+                })
+                continue
+
+            text_lines = []
+            for raw_line in block.splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+
+                image_match = image_pattern.match(line)
+                if image_match:
+                    if text_lines:
+                        ordered_elements.append({
+                            'type': 'paragraph',
+                            'original_data': self._pop_matching_paragraph(
+                                self._markdown_lines_to_paragraph_text(text_lines),
+                                paragraphs
+                            )
+                        })
+                        text_lines = []
+
+                    ordered_elements.append({
+                        'type': 'image',
+                        'original_data': self._pop_matching_image(
+                            image_match.group(2).strip(),
+                            image_match.group(1).strip(),
+                            images
+                        )
+                    })
+                    continue
+
+                text_lines.append(line)
+
+            if text_lines:
+                ordered_elements.append({
+                    'type': 'paragraph',
+                    'original_data': self._pop_matching_paragraph(
+                        self._markdown_lines_to_paragraph_text(text_lines),
+                        paragraphs
+                    )
+                })
+
+        for paragraph in paragraphs:
+            ordered_elements.append({'type': 'paragraph', 'original_data': paragraph})
+        for table in tables:
+            ordered_elements.append({'type': 'table', 'original_data': table})
+        for image in images:
+            ordered_elements.append({'type': 'image', 'original_data': image})
+
+        return ordered_elements
+
+    def _build_fallback_document_elements(self, document_content) -> List[Dict]:
+        """在缺少 markdown 顺序信息时，按现有列表顺序回退。"""
+        ordered_elements = []
+
+        for paragraph in document_content.paragraphs or []:
+            ordered_elements.append({'type': 'paragraph', 'original_data': paragraph})
+        for table in document_content.tables or []:
+            ordered_elements.append({'type': 'table', 'original_data': table})
+        for image in document_content.images or []:
+            ordered_elements.append({'type': 'image', 'original_data': image})
+
+        return ordered_elements
+
+    def _build_ordered_document_elements(self, document_content) -> List[Dict]:
+        """优先按 markdown 恢复原始顺序，失败时退回旧顺序。"""
+        ordered_elements = self._build_markdown_ordered_elements(document_content)
+        return ordered_elements or self._build_fallback_document_elements(document_content)
     
     def _process_document_content_unified(self, document_content) -> Dict:
         """
@@ -429,57 +611,65 @@ class SemanticChunker:
             'element_types': [],   # 元素类型列表
             'markdown_content': document_content.markdown_content
         }
-        
-        # 处理段落
-        for i, para in enumerate(document_content.paragraphs):
-            content = para.get('content', '').strip()
-            if content and len(content) >= 10:
+
+        ordered_elements = self._build_ordered_document_elements(document_content)
+
+        for source_element in ordered_elements:
+            element_type = source_element['type']
+            original_data = source_element.get('original_data', {})
+
+            if element_type == 'paragraph':
+                content = original_data.get('content', '').strip()
+                if not content or len(content) < 10:
+                    continue
+
                 cleaned_content = self._clean_text(content)
-                if cleaned_content:
-                    processed_content['texts'].append(cleaned_content)
-                    processed_content['elements'].append({
-                        'type': 'paragraph',
-                        'content': cleaned_content,
-                        'original_data': para,
-                        'index': len(processed_content['elements'])
-                    })
-                    processed_content['element_types'].append('paragraph')
-        
-        # 处理表格
-        for i, table in enumerate(document_content.tables):
-            # 将表格转换为文本描述用于语义分析
-            table_text = self._table_to_text(table)
-            if table_text:
+                if not cleaned_content:
+                    continue
+
+                processed_content['texts'].append(cleaned_content)
+                processed_content['elements'].append({
+                    'type': 'paragraph',
+                    'content': cleaned_content,
+                    'original_data': original_data,
+                    'index': len(processed_content['elements'])
+                })
+                processed_content['element_types'].append('paragraph')
+                continue
+
+            if element_type == 'table':
+                table_text = self._table_to_text(original_data)
+                if not table_text:
+                    continue
+
                 processed_content['texts'].append(table_text)
                 processed_content['elements'].append({
                     'type': 'table',
                     'content': table_text,
-                    'original_data': table,
-                    'markdown': table.get('markdown', []),
+                    'original_data': original_data,
+                    'markdown': original_data.get('markdown', []),
                     'index': len(processed_content['elements'])
                 })
                 processed_content['element_types'].append('table')
-        
-        # 处理图片（图片参与切片但不参与语义相似度计算）
-        for i, image in enumerate(document_content.images):
-            # 为图片创建描述文本
-            image_text = f"图片: {image.get('filename', f'image_{i+1}')}"
-            # 创建markdown格式的图片引用
-            image_url = image.get('url', '')
-            image_filename = image.get('filename', f'image_{i+1}')
-            markdown_image = f"![{image_filename}]({image_url})" if image_url else image_text
-            
-            # 图片元素添加到处理列表中，但使用特殊标记
-            processed_content['texts'].append(f"[IMAGE_PLACEHOLDER_{i}]")  # 占位符用于位置标记
-            processed_content['elements'].append({
-                'type': 'image',
-                'content': image_text,
-                'markdown_content': markdown_image,  # 添加markdown格式内容
-                'original_data': image,
-                'index': len(processed_content['elements']),
-                'is_image_placeholder': True  # 标记为图片占位符
-            })
-            processed_content['element_types'].append('image')
+                continue
+
+            if element_type == 'image':
+                image_index = len([element for element in processed_content['elements'] if element['type'] == 'image'])
+                image_filename = original_data.get('filename', f'image_{image_index + 1}')
+                image_url = original_data.get('url', '')
+                image_text = f"图片: {image_filename}"
+                markdown_image = f"![{image_filename}]({image_url})" if image_url else image_text
+
+                processed_content['texts'].append(f"[IMAGE_PLACEHOLDER_{image_index}]")
+                processed_content['elements'].append({
+                    'type': 'image',
+                    'content': image_text,
+                    'markdown_content': markdown_image,
+                    'original_data': original_data,
+                    'index': len(processed_content['elements']),
+                    'is_image_placeholder': True
+                })
+                processed_content['element_types'].append('image')
         
         logger.info(f"处理完成: {len(processed_content['texts'])} 个文本元素用于语义分析")
         return processed_content
@@ -624,57 +814,55 @@ class SemanticChunker:
             return []
         
         try:
-            # 1. 找到语义边界
-            boundaries = self.semantic_analyzer.find_semantic_boundaries(
-                embeddings, 
-                threshold=self.config.semantic_threshold
-            )
-            
-            # 确保边界列表不为空
-            if not boundaries or len(boundaries) < 2:
-                boundaries = [0, len(processed_content['texts'])]
-            
             chunks = []
-            
-            # 2. 根据边界创建切片
-            for i in range(len(boundaries) - 1):
-                start_idx = boundaries[i]
-                end_idx = boundaries[i + 1]
-                
-                # 收集这个范围内的所有元素
-                chunk_elements = []
-                chunk_texts = []
-                
-                for j in range(start_idx, end_idx):
-                    if j < len(processed_content['elements']):
-                        element = processed_content['elements'][j]
-                        chunk_elements.append(element)
-                        chunk_texts.append(element['content'])
-                
-                if chunk_texts:
-                    # 合并文本内容
-                    chunk_content = self._merge_chunk_content(chunk_elements)
-                    
-                    # 创建切片对象
-                    chunk = TextChunk(
-                        content=chunk_content,
-                        start_pos=start_idx,
-                        end_pos=end_idx,
-                        semantic_score=self._calculate_chunk_semantic_score(list(range(start_idx, end_idx)), embeddings),
-                        token_count=len(chunk_content.split()),
-                        paragraph_indices=list(range(start_idx, end_idx)),
-                        chunk_type=self._determine_chunk_type(chunk_elements),
-                        metadata={
-                            'elements': chunk_elements,
-                            'element_count': len(chunk_elements),
-                            'has_table': any(e['type'] == 'table' for e in chunk_elements),
-                            'has_image': any(e['type'] == 'image' for e in chunk_elements),
-                            'source_file': document_content.file_info.get('name', '') if document_content else '',
-                            'file_format': document_content.file_info.get('format', '') if document_content else 'text'
-                        }
+
+            current_chunk_indices = []
+            current_chunk_elements = []
+            current_chunk_length = 0
+
+            for index, element in enumerate(processed_content['elements']):
+                element_length = len(element.get('content', ''))
+
+                should_start_new_chunk = self._should_start_new_chunk_unified(
+                    current_chunk_elements,
+                    current_chunk_indices,
+                    current_chunk_length,
+                    element,
+                    embeddings,
+                    index
+                )
+
+                if should_start_new_chunk and current_chunk_elements:
+                    chunks.append(
+                        self._create_unified_chunk(
+                            current_chunk_elements,
+                            current_chunk_indices,
+                            embeddings,
+                            document_content
+                        )
                     )
-                    
-                    chunks.append(chunk)
+
+                    overlap_indices, overlap_elements = self._calculate_unified_overlap(
+                        current_chunk_indices,
+                        current_chunk_elements
+                    )
+                    current_chunk_indices = overlap_indices
+                    current_chunk_elements = overlap_elements
+                    current_chunk_length = sum(len(item.get('content', '')) for item in current_chunk_elements)
+
+                current_chunk_indices.append(index)
+                current_chunk_elements.append(element)
+                current_chunk_length += element_length
+
+            if current_chunk_elements:
+                chunks.append(
+                    self._create_unified_chunk(
+                        current_chunk_elements,
+                        current_chunk_indices,
+                        embeddings,
+                        document_content
+                    )
+                )
             
             logger.info(f"语义切片完成，生成 {len(chunks)} 个切片")
             return chunks
@@ -683,6 +871,80 @@ class SemanticChunker:
             logger.error(f"统一语义切片失败: {e}")
             # 降级到简单切片
             return self._fallback_chunking(processed_content['texts'])
+
+    def _should_start_new_chunk_unified(
+        self,
+        current_elements: List[Dict],
+        current_indices: List[int],
+        current_length: int,
+        new_element: Dict,
+        embeddings: np.ndarray,
+        new_index: int
+    ) -> bool:
+        """统一切片的边界判定，优先保持顺序和结构。"""
+        if not current_elements:
+            return False
+
+        original_data = new_element.get('original_data', {})
+        if (
+            self.config.preserve_structure
+            and new_element.get('type') == 'paragraph'
+            and original_data.get('type') in {'heading', 'title'}
+            and current_length >= self.config.min_chunk_size
+        ):
+            return True
+
+        return self._should_start_new_chunk(
+            current_indices,
+            current_length,
+            len(new_element.get('content', '')),
+            embeddings,
+            new_index
+        )
+
+    def _calculate_unified_overlap(
+        self,
+        indices: List[int],
+        elements: List[Dict]
+    ) -> Tuple[List[int], List[Dict]]:
+        """按元素级别计算统一切片的重叠部分。"""
+        if self.config.overlap_ratio <= 0 or not elements:
+            return [], []
+
+        overlap_count = max(1, int(len(elements) * self.config.overlap_ratio))
+        overlap_count = min(overlap_count, len(elements) - 1)
+        if overlap_count <= 0:
+            return [], []
+
+        return indices[-overlap_count:], elements[-overlap_count:]
+
+    def _create_unified_chunk(
+        self,
+        chunk_elements: List[Dict],
+        chunk_indices: List[int],
+        embeddings: np.ndarray,
+        document_content
+    ) -> TextChunk:
+        """根据当前累计元素创建统一切片。"""
+        chunk_content = self._merge_chunk_content(chunk_elements)
+
+        return TextChunk(
+            content=chunk_content,
+            start_pos=chunk_indices[0],
+            end_pos=chunk_indices[-1] + 1,
+            semantic_score=self._calculate_chunk_semantic_score(chunk_indices, embeddings),
+            token_count=self._estimate_token_count(chunk_content),
+            paragraph_indices=list(chunk_indices),
+            chunk_type=self._determine_chunk_type(chunk_elements),
+            metadata={
+                'elements': chunk_elements,
+                'element_count': len(chunk_elements),
+                'has_table': any(element['type'] == 'table' for element in chunk_elements),
+                'has_image': any(element['type'] == 'image' for element in chunk_elements),
+                'source_file': document_content.file_info.get('name', '') if document_content else '',
+                'file_format': document_content.file_info.get('format', '') if document_content else 'text'
+            }
+        )
     
     def _merge_chunk_content(self, elements: List[Dict]) -> str:
         """
