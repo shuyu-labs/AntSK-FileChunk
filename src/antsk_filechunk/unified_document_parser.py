@@ -69,7 +69,7 @@ class UnifiedDocumentParser:
         self.image_base_url = image_base_url
         self.image_save_dir = Path(image_save_dir)
         self.image_save_dir.mkdir(parents=True, exist_ok=True)
-        self.remote_parse_url = os.getenv("FILEEXT_API_URL", "https://fileext.antsk.cn/api/parse")
+        self.remote_parse_url = os.getenv("FILEEXT_API_URL", "https://fileext.tree456.com/api/parse")
         self.remote_parse_api_key = os.getenv("FILEEXT_API_KEY", "").strip()
         self.remote_parse_timeout = int(os.getenv("FILEEXT_API_TIMEOUT", "120"))
         self.remote_parse_enabled = os.getenv("FILEEXT_API_ENABLED", "true").strip().lower() not in {
@@ -264,7 +264,7 @@ class UnifiedDocumentParser:
         metadata = {
             "title": file_path.stem,
             "format": file_extension.lstrip(".").upper(),
-            "parser": "fileext.antsk.cn",
+            "parser": "fileext.tree456.com",
         }
 
         return DocumentContent(
