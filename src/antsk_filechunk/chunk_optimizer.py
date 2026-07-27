@@ -152,53 +152,16 @@ class ChunkOptimizer:
             分割后的子切片列表
         """
         content = chunk.content
-        target_size = self.config.target_chunk_size
-        
-        # 尝试按句子分割
-        sentences = self._split_into_sentences(content)
-        
-        if len(sentences) <= 1:
-            # 无法按句子分割，按字符强制分割
+        text_parts = self._split_text_by_safe_windows(content)
+
+        if len(text_parts) <= 1:
             return self._force_split_chunk(chunk)
-        
-        sub_chunks = []
-        current_sentences = []
-        current_length = 0
-        
-        for sentence in sentences:
-            sentence_length = len(sentence)
-            
-            if current_length + sentence_length > self.config.max_chunk_size and current_sentences:
-                # 创建子切片
-                sub_chunk = self._create_sub_chunk(
-                    current_sentences, 
-                    chunk, 
-                    len(sub_chunks)
-                )
-                sub_chunks.append(sub_chunk)
-                
-                # 重置（考虑重叠）
-                if self.config.overlap_ratio > 0 and len(current_sentences) > 1:
-                    overlap_count = max(1, int(len(current_sentences) * self.config.overlap_ratio))
-                    current_sentences = current_sentences[-overlap_count:]
-                    current_length = sum(len(s) for s in current_sentences)
-                else:
-                    current_sentences = []
-                    current_length = 0
-            
-            current_sentences.append(sentence)
-            current_length += sentence_length
-        
-        # 处理最后一组句子
-        if current_sentences:
-            sub_chunk = self._create_sub_chunk(
-                current_sentences, 
-                chunk, 
-                len(sub_chunks)
-            )
-            sub_chunks.append(sub_chunk)
-        
-        return sub_chunks if sub_chunks else [chunk]
+
+        return [
+            self._create_text_sub_chunk(text_part, chunk, index)
+            for index, text_part in enumerate(text_parts)
+            if text_part.strip()
+        ]
     
     def _split_into_sentences(self, text: str) -> List[str]:
         """
@@ -210,16 +173,104 @@ class ChunkOptimizer:
         Returns:
             句子列表
         """
-        if self.config.language == "zh":
-            # 中文句子分割
-            sentences = re.split(r'[。！？；]', text)
-        else:
-            # 英文句子分割
-            sentences = re.split(r'[.!?;]', text)
-        
-        # 清理和过滤
-        sentences = [s.strip() for s in sentences if s.strip()]
-        return sentences
+        sentence_pattern = r'.+?[。！？；.!?;]["”’\'\)\]}]*|.+$'
+        sentences = re.findall(sentence_pattern, text, flags=re.DOTALL)
+        return [sentence.strip() for sentence in sentences if sentence.strip()]
+
+    def _split_text_by_safe_windows(self, text: str) -> List[str]:
+        """在 min/max 硬约束窗口内，尽量选择自然语言边界切分。"""
+        content = text.strip()
+        if len(content) <= self.config.max_chunk_size:
+            return [content] if content else []
+
+        parts = []
+        start = 0
+        text_length = len(content)
+
+        while text_length - start > self.config.max_chunk_size:
+            low = start + self.config.min_chunk_size
+            high = min(start + self.config.max_chunk_size, text_length - self.config.min_chunk_size)
+
+            if high < low:
+                high = min(start + self.config.max_chunk_size, text_length)
+
+            target = min(start + self.config.target_chunk_size, high)
+            cut = self._find_best_safe_cut(content, low, high, target)
+
+            if cut is None or cut <= start:
+                cut = high
+
+            part = content[start:cut].strip()
+            if part:
+                parts.append(part)
+            start = self._skip_leading_whitespace(content, cut)
+
+        tail = content[start:].strip()
+        if tail:
+            if len(tail) < self.config.min_chunk_size and parts:
+                merged = self._join_boundary_content(parts[-1], tail)
+                if len(merged) <= self.config.max_chunk_size:
+                    parts[-1] = merged
+                else:
+                    parts.append(tail)
+            else:
+                parts.append(tail)
+
+        return parts
+
+    def _find_best_safe_cut(self, text: str, low: int, high: int, target: int) -> Optional[int]:
+        """在合法区间内找最佳切点：硬范围优先，自然边界其次，接近 target 再其次。"""
+        best_cut = None
+        best_score = None
+
+        for cut in range(low, high + 1):
+            priority = self._boundary_priority(text, cut)
+            if priority is None:
+                continue
+
+            score = (priority, abs(cut - target))
+            if best_score is None or score < best_score:
+                best_score = score
+                best_cut = cut
+
+        return best_cut
+
+    def _boundary_priority(self, text: str, cut: int) -> Optional[int]:
+        """返回切点优先级，数字越小越优。"""
+        if cut <= 0 or cut > len(text):
+            return None
+
+        previous_two = text[max(0, cut - 2):cut]
+
+        if previous_two in {"\n\n", "\r\n"}:
+            return 0
+
+        before_cut = text[:cut].rstrip()
+        if not before_cut:
+            return None
+
+        previous = before_cut[-1]
+        while previous in '"”’\')]}':
+            before_cut = before_cut[:-1].rstrip()
+            if not before_cut:
+                return None
+            previous = before_cut[-1]
+
+        if previous in '。！？.!?':
+            return 1
+        if previous in '；;':
+            return 2
+        if previous in '，,':
+            return 3
+        if previous in ' \n\t':
+            return 4
+
+        return None
+
+    def _skip_leading_whitespace(self, text: str, index: int) -> int:
+        while index < len(text) and text[index].isspace():
+            index += 1
+        return index
     
     def _force_split_chunk(self, chunk) -> List:
         """
@@ -232,8 +283,7 @@ class ChunkOptimizer:
             分割后的子切片列表
         """
         content = chunk.content
-        target_size = self.config.target_chunk_size
-        overlap_size = int(target_size * self.config.overlap_ratio)
+        target_size = min(self.config.target_chunk_size, self.config.max_chunk_size)
         
         sub_chunks = []
         start = 0
@@ -273,10 +323,31 @@ class ChunkOptimizer:
                 )
                 sub_chunks.append(sub_chunk)
             
-            # 计算下一个起始位置（考虑重叠）
-            start = max(start + 1, end - overlap_size)
+            # 严格遵守 max_chunk_size 时不在强制切分里引入重叠，避免重复内容造成边界失控。
+            start = self._skip_leading_whitespace(content, end)
         
         return sub_chunks
+
+    def _create_text_sub_chunk(self, content: str, parent_chunk, index: int):
+        from .enhanced_semantic_chunker import TextChunk
+
+        sub_content = content.strip()
+        return TextChunk(
+            content=sub_content,
+            start_pos=0,
+            end_pos=len(sub_content),
+            semantic_score=parent_chunk.semantic_score,
+            token_count=self._estimate_token_count(sub_content),
+            paragraph_indices=parent_chunk.paragraph_indices,
+            chunk_type=parent_chunk.chunk_type,
+            metadata={
+                **(parent_chunk.metadata or {}),
+                'parent_chunk': True,
+                'sub_chunk_index': index,
+                'safe_window_split': True,
+                'requires_score_refresh': True,
+            }
+        )
     
     def _create_sub_chunk(self, sentences: List[str], parent_chunk, index: int):
         """
@@ -483,7 +554,7 @@ class ChunkOptimizer:
                 continue
 
             end_index = index + 1
-            while end_index < len(text) and text[end_index] in '"”’\'\)]} \t\r\n':
+            while end_index < len(text) and text[end_index] in '"”’\')]} \t\r\n':
                 end_index += 1
 
             return end_index
